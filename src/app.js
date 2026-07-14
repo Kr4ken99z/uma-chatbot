@@ -88,19 +88,21 @@ app.post('/api/chat/stream', async (req, res) => {
     }
 });
 
-const server = app.listen(PORT, () => {
-    console.log(`Uma chatbot is running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+    const server = app.listen(PORT, () => {
+        console.log(`Uma chatbot is running at http://localhost:${PORT}`);
+    });
 
-server.on('error', error => {
-    if (error.code === 'EADDRINUSE') {
-        console.error(`Port ${PORT} is already in use. Set PORT to a free port in .env.`);
-    } else {
-        console.error('Unable to start Uma chatbot:', error.message);
-    }
+    server.on('error', error => {
+        if (error.code === 'EADDRINUSE') {
+            console.error(`Port ${PORT} is already in use. Set PORT to a free port in .env.`);
+        } else {
+            console.error('Unable to start Uma chatbot:', error.message);
+        }
 
-    process.exit(1);
-});
+        process.exit(1);
+    });
+}
 
 function getUserFacingError(error) {
     const message = String(error?.message || '');
@@ -119,3 +121,5 @@ function getUserFacingError(error) {
 
     return 'Unable to get a response from Uma right now.';
 }
+
+module.exports = app;
