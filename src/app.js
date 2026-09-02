@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const { sendMessage, streamMessage, getActiveProviderName } = require('./services/chatApi');
 const authRouter = require('./routes/auth');
+const conversationsRouter = require('./routes/conversations');
 const { connectDB, isDBConnected } = require('./utils/db');
 
 const app = express();
@@ -12,8 +13,9 @@ const PORT = process.env.PORT || 3002;
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json({ limit: '1mb' }));
 
-// Mount auth routes
+// Mount auth and conversation routes
 app.use('/api/auth', authRouter);
+app.use('/api/conversations', conversationsRouter);
 
 app.get('/api/health', async (req, res) => {
     const mode = getActiveProviderName();

@@ -136,8 +136,18 @@ newChat.addEventListener('click', () => {
     closeSidebarOnMobile();
 });
 
-clearChat.addEventListener('click', () => {
+clearChat.addEventListener('click', async () => {
     if (confirm('Clear all stored conversations? This cannot be undone.')) {
+        if (authToken) {
+            try {
+                await fetch('/api/conversations', {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${authToken}` },
+                });
+            } catch (err) {
+                console.warn('Failed to delete conversations from DB:', err);
+            }
+        }
         clearAllHistory();
         showToast('All conversations cleared');
     }
@@ -377,6 +387,9 @@ async function handleAuthSubmit(event) {
         updateAuthUI();
         setAuthSuccess(authMode === 'signup' ? 'Account created successfully!' : 'Signed in successfully!');
 
+        // Fetch user's conversation history directly from MongoDB Atlas!
+        await loadUserConversationsFromDB();
+
         setTimeout(() => {
             closeAuthModal();
             showToast(`Welcome, ${currentUser.name}!`);
@@ -391,7 +404,14 @@ async function handleAuthSubmit(event) {
 }
 
 async function verifySession() {
-    if (!authToken) return;
+    if (!authToken) {
+        // Guest mode: always a clean, fresh start without previous user chats
+        conversations = [createBlankConversation()];
+        activeChatId = conversations[0].id;
+        renderHistory();
+        renderMessages();
+        return;
+    }
 
     try {
         const res = await fetch('/api/auth/me', {
@@ -404,6 +424,7 @@ async function verifySession() {
                 currentUser = data.user;
                 localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
                 updateAuthUI();
+                await loadUserConversationsFromDB();
                 return;
             }
         }
@@ -414,15 +435,77 @@ async function verifySession() {
     }
 }
 
+async function loadUserConversationsFromDB() {
+    if (!authToken) return;
+
+    try {
+        const res = await fetch('/api/conversations', {
+            headers: { Authorization: `Bearer ${authToken}` },
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data.ok && Array.isArray(data.conversations)) {
+                if (data.conversations.length > 0) {
+                    conversations = data.conversations.map(normalizeConversation);
+                } else {
+                    conversations = [createBlankConversation()];
+                }
+                activeChatId = conversations[0].id;
+                sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
+                localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+                localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+                renderHistory();
+                renderMessages();
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to load conversations from DB:', err);
+    }
+}
+
+async function syncConversationToDB(conv) {
+    if (!authToken || !conv || !conv.id) return;
+    if (!conv.messages || !conv.messages.length) return;
+
+    try {
+        await fetch('/api/conversations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({
+                id: conv.id,
+                title: conv.title || 'New chat',
+                messages: conv.messages,
+            }),
+        });
+    } catch (err) {
+        console.warn('Failed to sync conversation to DB:', err);
+    }
+}
+
 function handleLogout(shouldNotify = true) {
     authToken = null;
     currentUser = null;
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(CONVERSATIONS_KEY);
+    localStorage.removeItem(ACTIVE_CHAT_KEY);
+    sessionStorage.removeItem(TAB_CHAT_KEY);
+
+    // Completely reset to a fresh blank start for the guest
+    conversations = [createBlankConversation()];
+    activeChatId = conversations[0].id;
+
     updateAuthUI();
+    renderHistory();
+    renderMessages();
+    focusInput();
 
     if (shouldNotify) {
-        showToast('Signed out of Uma');
+        showToast('Signed out. Fresh guest session started.');
     }
 }
 
@@ -553,6 +636,9 @@ async function streamUmaResponse(userPrompt) {
     } finally {
         setLoading(false);
         renderHistory();
+        if (authToken) {
+            syncConversationToDB(getActiveConversation());
+        }
     }
 }
 
@@ -727,6 +813,10 @@ function addMessage(role, text) {
     messagesFlow.appendChild(row);
     scrollToBottom();
 
+    if (authToken && role === 'user') {
+        syncConversationToDB(conversation);
+    }
+
     return { message, row, bubble: row.querySelector('.bubble') };
 }
 
@@ -735,6 +825,11 @@ function addMessage(role, text) {
 // -----------------------------------------------------------------------------
 
 function loadConversations() {
+    // If not logged in, guest gets a fresh start every time!
+    if (!authToken) {
+        return [createBlankConversation()];
+    }
+
     try {
         const saved = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY));
         if (Array.isArray(saved) && saved.length) {
@@ -743,9 +838,6 @@ function loadConversations() {
     } catch {
         // Fall through
     }
-
-    const legacy = loadLegacyConversation();
-    if (legacy) return [legacy];
 
     return [createBlankConversation()];
 }
@@ -816,7 +908,15 @@ function initTabChat() {
     // This is a BRAND NEW TAB:
     sessionStorage.setItem(TAB_SESSION_KEY, 'true');
 
-    // If the most recent conversation is already empty (brand new), use it
+    // If not logged in (guest), always start with a clean fresh slate!
+    if (!authToken) {
+        const guestChat = createBlankConversation();
+        conversations = [guestChat];
+        sessionStorage.setItem(TAB_CHAT_KEY, guestChat.id);
+        return guestChat.id;
+    }
+
+    // If logged in and the most recent conversation is already empty (brand new), use it
     const topConv = conversations[0];
     const isTopEmpty = topConv && (!topConv.messages || topConv.messages.length === 0);
 
@@ -847,8 +947,10 @@ function getActiveConversation() {
 }
 
 function saveConversations() {
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
-    localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+    if (authToken) {
+        localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+        localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+    }
     sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
 }
 
