@@ -63,7 +63,7 @@ npm start
 Open the app:
 
 ```text
-http://localhost:3002
+https://uma-chatbot.vercel.app/
 ```
 
 ## Notes
