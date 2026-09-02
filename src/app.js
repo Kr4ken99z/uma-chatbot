@@ -41,13 +41,14 @@ app.get('/api/health', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
     const message = String(req.body?.message || '').trim();
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
     if (!message) {
         return res.status(400).json({ error: 'Message is required.' });
     }
 
     try {
-        const result = await sendMessage(message);
+        const result = await sendMessage(message, history);
         return res.json(result);
     } catch (error) {
         console.error('Chat API error:', error.message);
@@ -59,6 +60,7 @@ app.post('/api/chat', async (req, res) => {
 
 app.post('/api/chat/stream', async (req, res) => {
     const message = String(req.body?.message || '').trim();
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
     if (!message) {
         return res.status(400).json({ error: 'Message is required.' });
@@ -86,7 +88,7 @@ app.post('/api/chat/stream', async (req, res) => {
     };
 
     try {
-        const result = await streamMessage(message, chunk => {
+        const result = await streamMessage(message, history, chunk => {
             reply += chunk;
             writeEvent('chunk', { chunk });
         });

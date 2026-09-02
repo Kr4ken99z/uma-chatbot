@@ -47,7 +47,7 @@ function getProviderOrder() {
     return order;
 }
 
-async function sendMessage(userMessage) {
+async function sendMessage(userMessage, history = []) {
     const providerOrder = getProviderOrder();
 
     if (!providerOrder.length) {
@@ -61,7 +61,7 @@ async function sendMessage(userMessage) {
 
     for (const providerName of providerOrder) {
         try {
-            return await getProvider(providerName).sendMessage(userMessage);
+            return await getProvider(providerName).sendMessage(userMessage, history);
         } catch (error) {
             lastError = error;
 
@@ -76,7 +76,7 @@ async function sendMessage(userMessage) {
     throw lastError || new Error('No AI provider could respond.');
 }
 
-async function streamMessage(userMessage, onChunk) {
+async function streamMessage(userMessage, history = [], onChunk) {
     const providerOrder = getProviderOrder();
 
     if (!providerOrder.length) {
@@ -88,7 +88,7 @@ async function streamMessage(userMessage, onChunk) {
 
     for (const providerName of providerOrder) {
         try {
-            return await getProvider(providerName).streamMessage(userMessage, onChunk);
+            return await getProvider(providerName).streamMessage(userMessage, history, onChunk);
         } catch (error) {
             lastError = error;
 

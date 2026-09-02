@@ -59,6 +59,7 @@ const nameGroup = document.getElementById('nameGroup');
 const authName = document.getElementById('authName');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
+const generatePasswordBtn = document.getElementById('generatePasswordBtn');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
 const authSwitchText = document.getElementById('authSwitchText');
 const switchAuthMode = document.getElementById('switchAuthMode');
@@ -303,6 +304,8 @@ function switchAuthTab(mode) {
         authTitle.textContent = 'Create an Account';
         authSubtitle.textContent = 'Register to sync your chats across sessions.';
         authSubmitBtn.querySelector('span').textContent = 'Create Account';
+        authPassword.setAttribute('autocomplete', 'new-password');
+        if (generatePasswordBtn) generatePasswordBtn.style.display = 'inline-block';
         authSwitchText.innerHTML = `Already have an account? <button type="button" id="switchAuthMode">Sign In</button>`;
         document.getElementById('switchAuthMode').addEventListener('click', () => switchAuthTab('signin'));
         authName.focus();
@@ -317,10 +320,28 @@ function switchAuthTab(mode) {
         authTitle.textContent = 'Welcome to Uma';
         authSubtitle.textContent = 'Sign in or register to sync your chats.';
         authSubmitBtn.querySelector('span').textContent = 'Sign In';
+        authPassword.setAttribute('autocomplete', 'current-password');
+        if (generatePasswordBtn) generatePasswordBtn.style.display = 'none';
         authSwitchText.innerHTML = `Don't have an account? <button type="button" id="switchAuthMode">Create one</button>`;
         document.getElementById('switchAuthMode').addEventListener('click', () => switchAuthTab('signup'));
         authEmail.focus();
     }
+}
+
+if (generatePasswordBtn) {
+    generatePasswordBtn.addEventListener('click', () => {
+        const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*';
+        let pwd = 'Uma-';
+        for (let i = 0; i < 10; i++) {
+            pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        authPassword.value = pwd;
+        authPassword.type = 'text';
+        showToast('Strong password generated!');
+        setTimeout(() => {
+            authPassword.type = 'password';
+        }, 3000);
+    });
 }
 
 function clearAuthAlerts() {
@@ -576,10 +597,16 @@ async function streamUmaResponse(userPrompt) {
             headers['Authorization'] = `Bearer ${authToken}`;
         }
 
+        const activeConv = getActiveConversation();
+        const history = (activeConv?.messages || [])
+            .slice(0, -1) // Exclude the current user prompt that was just appended
+            .slice(-10) // Retain last 10 turns for memory
+            .map(m => ({ role: m.role, text: m.text }));
+
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
             headers,
-            body: JSON.stringify({ message: userPrompt }),
+            body: JSON.stringify({ message: userPrompt, history }),
         });
 
         if (!response.ok) {

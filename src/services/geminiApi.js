@@ -3,14 +3,15 @@ const { UMA_SYSTEM_PROMPT } = require('./prompt');
 
 const hasRealApiKey = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here';
 const FALLBACK_MODELS = [
-    'gemini-1.5-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.5-flash',
+    'gemini-flash-latest',
     'gemini-flash-lite-latest',
 ];
 
-async function sendMessage(userMessage) {
-    const { response, model } = await fetchGeminiWithFallback('generateContent', userMessage);
+async function sendMessage(userMessage, history = []) {
+    const { response, model } = await fetchGeminiWithFallback('generateContent', userMessage, history);
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -26,8 +27,8 @@ async function sendMessage(userMessage) {
     };
 }
 
-async function streamMessage(userMessage, onChunk) {
-    const { response, model } = await fetchGeminiWithFallback('streamGenerateContent', userMessage, 'alt=sse');
+async function streamMessage(userMessage, history = [], onChunk) {
+    const { response, model } = await fetchGeminiWithFallback('streamGenerateContent', userMessage, history, 'alt=sse');
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -39,17 +40,17 @@ async function streamMessage(userMessage, onChunk) {
 }
 
 function getModelCandidates() {
-    return [...new Set([GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean))];
+    return [...new Set(['gemini-3.6-flash', GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean))];
 }
 
-async function fetchGeminiWithFallback(action, userMessage, query = '') {
+async function fetchGeminiWithFallback(action, userMessage, history = [], query = '') {
     const models = getModelCandidates();
     let lastResponse = null;
     let lastModel = models[0];
 
     for (const model of models) {
         lastModel = model;
-        const response = await fetchGemini(createGeminiEndpoint(model, action, query), userMessage);
+        const response = await fetchGemini(createGeminiEndpoint(model, action, query), userMessage, history);
 
         if (response.ok || !shouldRetryWithFallback(response.status)) {
             return { response, model };
@@ -65,7 +66,7 @@ async function fetchGeminiWithFallback(action, userMessage, query = '') {
 }
 
 function shouldRetryWithFallback(status) {
-    return status === 429 || status === 503;
+    return status === 429 || status === 503 || status === 404;
 }
 
 function formatGeminiError(status, errorText, model) {
@@ -88,28 +89,61 @@ function createGeminiEndpoint(model, action, query = '') {
     return `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}?${queryString}`;
 }
 
-function fetchGemini(endpoint, userMessage) {
+function fetchGemini(endpoint, userMessage, history = []) {
     return fetch(endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(createGeminiRequest(userMessage)),
+        body: JSON.stringify(createGeminiRequest(userMessage, history)),
     });
 }
 
-function createGeminiRequest(userMessage) {
+function sanitizeGeminiContents(history, userMessage) {
+    const turns = [];
+
+    if (Array.isArray(history)) {
+        for (const item of history) {
+            const text = String(item.text || '').trim();
+            if (!text) continue;
+            turns.push({
+                role: item.role === 'user' ? 'user' : 'model',
+                text,
+            });
+        }
+    }
+
+    turns.push({ role: 'user', text: String(userMessage || '').trim() });
+
+    const contents = [];
+    for (const turn of turns) {
+        // Gemini contents must begin with a 'user' turn
+        if (contents.length === 0 && turn.role === 'model') {
+            continue;
+        }
+
+        // Collapse consecutive messages with the same role into one turn
+        if (contents.length > 0 && contents[contents.length - 1].role === turn.role) {
+            contents[contents.length - 1].parts[0].text += `\n\n${turn.text}`;
+        } else {
+            contents.push({
+                role: turn.role,
+                parts: [{ text: turn.text }],
+            });
+        }
+    }
+
+    return contents;
+}
+
+function createGeminiRequest(userMessage, history = []) {
+    const contents = sanitizeGeminiContents(history, userMessage);
+
     return {
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    {
-                        text: `${UMA_SYSTEM_PROMPT}\n\nUser: ${userMessage}`,
-                    },
-                ],
-            },
-        ],
+        systemInstruction: {
+            parts: [{ text: UMA_SYSTEM_PROMPT }],
+        },
+        contents,
         generationConfig: {
             temperature: 0.7,
             maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,

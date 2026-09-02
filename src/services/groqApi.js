@@ -5,8 +5,8 @@ const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const hasRealApiKey = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here';
 
-async function sendMessage(userMessage) {
-    const response = await fetchGroq(userMessage, false);
+async function sendMessage(userMessage, history = []) {
+    const response = await fetchGroq(userMessage, history, false);
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -22,8 +22,8 @@ async function sendMessage(userMessage) {
     };
 }
 
-async function streamMessage(userMessage, onChunk) {
-    const response = await fetchGroq(userMessage, true);
+async function streamMessage(userMessage, history = [], onChunk) {
+    const response = await fetchGroq(userMessage, history, true);
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -34,7 +34,25 @@ async function streamMessage(userMessage, onChunk) {
     return { isMock: false };
 }
 
-function fetchGroq(userMessage, stream) {
+function buildGroqMessages(userMessage, history = []) {
+    const messages = [{ role: 'system', content: UMA_SYSTEM_PROMPT }];
+
+    if (Array.isArray(history)) {
+        for (const item of history) {
+            const text = String(item.text || '').trim();
+            if (!text) continue;
+            messages.push({
+                role: item.role === 'user' ? 'user' : 'assistant',
+                content: text,
+            });
+        }
+    }
+
+    messages.push({ role: 'user', content: String(userMessage || '').trim() });
+    return messages;
+}
+
+function fetchGroq(userMessage, history = [], stream = false) {
     return fetch(GROQ_CHAT_URL, {
         method: 'POST',
         headers: {
@@ -43,10 +61,7 @@ function fetchGroq(userMessage, stream) {
         },
         body: JSON.stringify({
             model: GROQ_MODEL,
-            messages: [
-                { role: 'system', content: UMA_SYSTEM_PROMPT },
-                { role: 'user', content: userMessage },
-            ],
+            messages: buildGroqMessages(userMessage, history),
             temperature: 0.7,
             max_tokens: GROQ_MAX_OUTPUT_TOKENS,
             stream,

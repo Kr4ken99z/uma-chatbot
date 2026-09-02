@@ -229,20 +229,23 @@
         <div class="auth-alert success" id="authSuccessAlert" role="alert" style="display:none;"></div>
 
         <!-- Auth Form -->
-        <form class="auth-form" id="authForm">
+        <form class="auth-form" id="authForm" autocomplete="on">
             <div class="form-group" id="nameGroup" style="display:none;">
                 <label for="authName">Full Name</label>
-                <input type="text" id="authName" placeholder="Enter your full name" autocomplete="name" />
+                <input type="text" id="authName" name="name" placeholder="Enter your full name" autocomplete="name" />
             </div>
 
             <div class="form-group">
                 <label for="authEmail">Email Address</label>
-                <input type="email" id="authEmail" placeholder="you@example.com" required autocomplete="email" />
+                <input type="email" id="authEmail" name="email" placeholder="you@example.com" required autocomplete="username email" />
             </div>
 
             <div class="form-group">
-                <label for="authPassword">Password</label>
-                <input type="password" id="authPassword" placeholder="At least 6 characters" required autocomplete="current-password" />
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label for="authPassword" style="margin-bottom:0;">Password</label>
+                    <button type="button" id="generatePasswordBtn" style="display:none; background:none; border:none; color:var(--coral); font-size:0.75rem; font-weight:600; cursor:pointer; padding:0;" title="Click to generate a strong password">⚡ Suggest Strong Password</button>
+                </div>
+                <input type="password" id="authPassword" name="password" placeholder="At least 6 characters" required autocomplete="current-password" />
             </div>
 
             <button class="auth-submit-btn" id="authSubmitBtn" type="submit">
