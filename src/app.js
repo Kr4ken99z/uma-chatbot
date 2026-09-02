@@ -15,14 +15,21 @@ app.use(express.json({ limit: '1mb' }));
 // Mount auth routes
 app.use('/api/auth', authRouter);
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
     const mode = getActiveProviderName();
+    if (process.env.MONGODB_URI && !isDBConnected()) {
+        try {
+            await connectDB();
+        } catch {
+            // DB connection attempt failed
+        }
+    }
 
     res.json({
         ok: true,
         service: 'Uma Chatbot',
         mode,
-        database: isDBConnected() ? 'connected' : (process.env.MONGODB_URI ? 'connecting' : 'not_configured'),
+        database: isDBConnected() ? 'connected' : (process.env.MONGODB_URI ? 'error' : 'not_configured'),
     });
 });
 
