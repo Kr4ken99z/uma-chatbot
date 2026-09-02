@@ -104,11 +104,8 @@ async function streamMessage(userMessage, onChunk) {
 }
 
 function shouldTryNextProvider(error, providerOrder, providerName) {
-    const message = String(error?.message || '');
     const hasNextProvider = providerOrder.indexOf(providerName) < providerOrder.length - 1;
-    const isRetryable = message.includes('429') || message.includes('503');
-
-    return hasNextProvider && isRetryable;
+    return hasNextProvider;
 }
 
 module.exports = {
