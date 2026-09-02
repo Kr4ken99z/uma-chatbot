@@ -1,6 +1,10 @@
 function createDemoReply(message) {
     const cleanedMessage = message.toLowerCase();
 
+    if (cleanedMessage.includes('who made') || cleanedMessage.includes('who created') || cleanedMessage.includes('creator') || cleanedMessage.includes('koustav')) {
+        return 'I was created and developed by Koustav Mondal, a Full-Stack Software Developer specializing in Java, Spring Boot, and the MERN stack. He is currently pursuing his B.Tech in Electronics and Communication Engineering at Academy of Technology.';
+    }
+
     if (cleanedMessage.includes('java')) {
         return 'Demo mode: A strong Java portfolio project would combine Spring Boot, MySQL, authentication, and a clean dashboard UI. Add API docs and screenshots to make it recruiter-friendly.';
     }
