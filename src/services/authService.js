@@ -1,7 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { connectDB } = require('../utils/db');
-const User = require('../models/User');
+const { getSQL, initDB } = require('../utils/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'uma-chatbot-secret-key-2026-auth';
 const JWT_EXPIRES_IN = '7d';
@@ -9,7 +8,7 @@ const JWT_EXPIRES_IN = '7d';
 function createToken(user) {
     return jwt.sign(
         {
-            id: user._id,
+            id: user.id,
             email: user.email,
             name: user.name,
         },
@@ -19,7 +18,8 @@ function createToken(user) {
 }
 
 async function signup({ name, email, password }) {
-    await connectDB();
+    await initDB();
+    const sql = getSQL();
 
     const cleanName = String(name || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
@@ -36,34 +36,38 @@ async function signup({ name, email, password }) {
         throw new Error('Password must be at least 6 characters long.');
     }
 
-    const existingUser = await User.findOne({ email: cleanEmail });
-    if (existingUser) {
+    const existing = await sql`
+        SELECT id FROM users WHERE email = ${cleanEmail} LIMIT 1;
+    `;
+    if (existing && existing.length > 0) {
         throw new Error('An account with this email already exists.');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
-        name: cleanName,
-        email: cleanEmail,
-        password: hashedPassword,
-    });
+    const inserted = await sql`
+        INSERT INTO users (name, email, password)
+        VALUES (${cleanName}, ${cleanEmail}, ${hashedPassword})
+        RETURNING id, name, email, created_at;
+    `;
 
+    const user = inserted[0];
     const token = createToken(user);
 
     return {
         user: {
-            id: user._id,
+            id: user.id,
             name: user.name,
             email: user.email,
-            createdAt: user.createdAt,
+            createdAt: user.created_at,
         },
         token,
     };
 }
 
 async function login({ email, password }) {
-    await connectDB();
+    await initDB();
+    const sql = getSQL();
 
     const cleanEmail = String(email || '').trim().toLowerCase();
 
@@ -71,11 +75,18 @@ async function login({ email, password }) {
         throw new Error('Please provide both email and password.');
     }
 
-    const user = await User.findOne({ email: cleanEmail });
-    if (!user) {
+    const users = await sql`
+        SELECT id, name, email, password, created_at
+        FROM users
+        WHERE email = ${cleanEmail}
+        LIMIT 1;
+    `;
+
+    if (!users || users.length === 0) {
         throw new Error('Invalid email or password.');
     }
 
+    const user = users[0];
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
         throw new Error('Invalid email or password.');
@@ -85,10 +96,10 @@ async function login({ email, password }) {
 
     return {
         user: {
-            id: user._id,
+            id: user.id,
             name: user.name,
             email: user.email,
-            createdAt: user.createdAt,
+            createdAt: user.created_at,
         },
         token,
     };
@@ -100,18 +111,26 @@ async function verifyToken(token) {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    await connectDB();
+    await initDB();
+    const sql = getSQL();
 
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user) {
+    const users = await sql`
+        SELECT id, name, email, created_at
+        FROM users
+        WHERE id = ${decoded.id}
+        LIMIT 1;
+    `;
+
+    if (!users || users.length === 0) {
         throw new Error('User no longer exists.');
     }
 
+    const user = users[0];
     return {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
-        createdAt: user.createdAt,
+        createdAt: user.created_at,
     };
 }
 

@@ -23,10 +23,13 @@ router.post('/signup', async (req, res) => {
             token: result.token,
         });
     } catch (error) {
-        const isDbError = error.message.includes('MONGODB_URI') || error.message.includes('connect ECONNREFUSED');
+        const isDbError =
+            error.message.includes('DATABASE_URL') ||
+            error.message.includes('connect ECONNREFUSED') ||
+            error.message.includes('Neon');
         const status = isDbError ? 503 : 400;
         const message = isDbError
-            ? 'Database is not yet connected. Please configure MONGODB_URI in your environment.'
+            ? 'Database is not yet connected. Please configure DATABASE_URL in your environment.'
             : error.message;
 
         return res.status(status).json({
@@ -47,10 +50,13 @@ router.post('/login', async (req, res) => {
             token: result.token,
         });
     } catch (error) {
-        const isDbError = error.message.includes('MONGODB_URI') || error.message.includes('connect ECONNREFUSED');
+        const isDbError =
+            error.message.includes('DATABASE_URL') ||
+            error.message.includes('connect ECONNREFUSED') ||
+            error.message.includes('Neon');
         const status = isDbError ? 503 : 401;
         const message = isDbError
-            ? 'Database is not yet connected. Please configure MONGODB_URI in your environment.'
+            ? 'Database is not yet connected. Please configure DATABASE_URL in your environment.'
             : error.message;
 
         return res.status(status).json({

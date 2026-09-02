@@ -1,48 +1,97 @@
-const mongoose = require('mongoose');
+const { neon } = require('@neondatabase/serverless');
 
-let cached = global.mongoose;
-
-if (!cached) {
-    cached = global.mongoose = { conn: null, promise: null };
+function getConnectionString() {
+    return (
+        process.env.DATABASE_URL ||
+        process.env.NEON_DATABASE_URL ||
+        process.env.POSTGRES_URL ||
+        ''
+    );
 }
 
-async function connectDB() {
-    const uri = process.env.MONGODB_URI;
+let sqlInstance = null;
+let isInitialized = false;
 
-    if (!uri) {
-        throw new Error('MONGODB_URI is not set in environment variables.');
+function getSQL() {
+    const connStr = getConnectionString();
+    if (!connStr) {
+        throw new Error('DATABASE_URL is not set. Please configure your Neon DB connection string.');
     }
 
-    if (cached.conn) {
-        return cached.conn;
+    if (!sqlInstance) {
+        sqlInstance = neon(connStr);
     }
 
-    if (!cached.promise) {
-        const opts = {
-            bufferCommands: false,
-        };
+    return sqlInstance;
+}
 
-        cached.promise = mongoose.connect(uri, opts).then(m => {
-            console.log('Connected to MongoDB');
-            return m;
-        });
-    }
+async function initDB() {
+    const connStr = getConnectionString();
+    if (!connStr) return false;
+    if (isInitialized) return true;
 
     try {
-        cached.conn = await cached.promise;
-    } catch (e) {
-        cached.promise = null;
-        throw e;
-    }
+        const sql = getSQL();
 
-    return cached.conn;
+        // Create users table
+        await sql`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+
+        // Create conversations table with JSONB messages
+        await sql`
+            CREATE TABLE IF NOT EXISTS conversations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                client_chat_id VARCHAR(255) NOT NULL,
+                title VARCHAR(255) DEFAULT 'New chat',
+                messages JSONB DEFAULT '[]'::jsonb,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_user_client_chat UNIQUE (user_id, client_chat_id)
+            );
+        `;
+
+        // Create index for fast sorting by recent chats
+        await sql`
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_updated 
+            ON conversations(user_id, updated_at DESC);
+        `;
+
+        isInitialized = true;
+        console.log('[Neon DB] Schema initialized successfully');
+        return true;
+    } catch (err) {
+        console.error('[Neon DB] Schema initialization error:', err.message);
+        throw err;
+    }
 }
 
-function isDBConnected() {
-    return mongoose.connection.readyState === 1;
+async function checkDB() {
+    const connStr = getConnectionString();
+    if (!connStr) return false;
+
+    try {
+        const sql = getSQL();
+        const result = await sql`SELECT 1 AS alive`;
+        return result && result.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function hasDBConfig() {
+    return Boolean(getConnectionString());
 }
 
 module.exports = {
-    connectDB,
-    isDBConnected,
+    getSQL,
+    initDB,
+    checkDB,
+    hasDBConfig,
 };

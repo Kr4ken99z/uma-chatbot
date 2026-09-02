@@ -1,7 +1,6 @@
 const express = require('express');
 const { verifyToken } = require('../services/authService');
-const Conversation = require('../models/Conversation');
-const { connectDB } = require('../utils/db');
+const { getSQL, initDB } = require('../utils/db');
 
 const router = express.Router();
 
@@ -26,7 +25,7 @@ async function requireAuth(req, res, next) {
     }
 
     try {
-        await connectDB();
+        await initDB();
         const user = await verifyToken(token);
         req.user = user;
         next();
@@ -44,16 +43,19 @@ router.use(requireAuth);
 // GET /api/conversations — Fetch all conversations for the authenticated user
 router.get('/', async (req, res) => {
     try {
-        const conversations = await Conversation.find({ userId: req.user.id })
-            .sort({ updatedAt: -1 })
-            .lean();
+        const sql = getSQL();
+        const rows = await sql`
+            SELECT client_chat_id AS id, title, messages, updated_at
+            FROM conversations
+            WHERE user_id = ${req.user.id}
+            ORDER BY updated_at DESC;
+        `;
 
-        // Format for frontend
-        const formatted = conversations.map(c => ({
-            id: c.clientChatId,
-            title: c.title,
-            messages: c.messages || [],
-            updatedAt: new Date(c.updatedAt).getTime(),
+        const formatted = rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            messages: typeof r.messages === 'string' ? JSON.parse(r.messages) : (r.messages || []),
+            updatedAt: new Date(r.updated_at).getTime(),
         }));
 
         return res.json({
@@ -61,6 +63,7 @@ router.get('/', async (req, res) => {
             conversations: formatted,
         });
     } catch (error) {
+        console.error('Fetch conversations error:', error);
         return res.status(500).json({
             ok: false,
             error: 'Failed to fetch conversations from database.',
@@ -80,36 +83,35 @@ router.post('/', async (req, res) => {
             });
         }
 
-        const validMessages = Array.isArray(messages)
-            ? messages.map(m => ({
-                  role: m.role === 'user' ? 'user' : 'bot',
-                  text: String(m.text || ''),
-                  createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
-              }))
-            : [];
+        const sql = getSQL();
+        const validMessages = Array.isArray(messages) ? messages : [];
+        const messagesJson = JSON.stringify(validMessages);
+        const cleanTitle = String(title || 'New chat').trim();
 
-        const updated = await Conversation.findOneAndUpdate(
-            { userId: req.user.id, clientChatId: String(id) },
-            {
-                userId: req.user.id,
-                clientChatId: String(id),
-                title: String(title || 'New chat').trim(),
-                messages: validMessages,
-                updatedAt: new Date(),
-            },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        const rows = await sql`
+            INSERT INTO conversations (user_id, client_chat_id, title, messages, updated_at)
+            VALUES (${req.user.id}, ${String(id)}, ${cleanTitle}, ${messagesJson}::jsonb, NOW())
+            ON CONFLICT (user_id, client_chat_id)
+            DO UPDATE SET 
+                title = ${cleanTitle},
+                messages = ${messagesJson}::jsonb,
+                updated_at = NOW()
+            RETURNING client_chat_id AS id, title, messages, updated_at;
+        `;
+
+        const updated = rows[0];
 
         return res.json({
             ok: true,
             conversation: {
-                id: updated.clientChatId,
+                id: updated.id,
                 title: updated.title,
-                messages: updated.messages,
-                updatedAt: new Date(updated.updatedAt).getTime(),
+                messages: typeof updated.messages === 'string' ? JSON.parse(updated.messages) : (updated.messages || []),
+                updatedAt: new Date(updated.updated_at).getTime(),
             },
         });
     } catch (error) {
+        console.error('Save conversation error:', error);
         return res.status(500).json({
             ok: false,
             error: 'Failed to save conversation to database.',
@@ -120,8 +122,11 @@ router.post('/', async (req, res) => {
 // DELETE /api/conversations/:id — Delete a single conversation
 router.delete('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        await Conversation.findOneAndDelete({ userId: req.user.id, clientChatId: id });
+        const sql = getSQL();
+        await sql`
+            DELETE FROM conversations 
+            WHERE user_id = ${req.user.id} AND client_chat_id = ${req.params.id};
+        `;
         return res.json({ ok: true, message: 'Conversation deleted.' });
     } catch (error) {
         return res.status(500).json({ ok: false, error: 'Failed to delete conversation.' });
@@ -131,7 +136,11 @@ router.delete('/:id', async (req, res) => {
 // DELETE /api/conversations — Delete all conversations for current user
 router.delete('/', async (req, res) => {
     try {
-        await Conversation.deleteMany({ userId: req.user.id });
+        const sql = getSQL();
+        await sql`
+            DELETE FROM conversations 
+            WHERE user_id = ${req.user.id};
+        `;
         return res.json({ ok: true, message: 'All conversations deleted.' });
     } catch (error) {
         return res.status(500).json({ ok: false, error: 'Failed to clear conversations.' });

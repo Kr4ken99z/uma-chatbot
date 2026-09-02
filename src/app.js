@@ -5,7 +5,7 @@ require('dotenv').config();
 const { sendMessage, streamMessage, getActiveProviderName } = require('./services/chatApi');
 const authRouter = require('./routes/auth');
 const conversationsRouter = require('./routes/conversations');
-const { connectDB, isDBConnected } = require('./utils/db');
+const { initDB, checkDB, hasDBConfig } = require('./utils/db');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -19,11 +19,15 @@ app.use('/api/conversations', conversationsRouter);
 
 app.get('/api/health', async (req, res) => {
     const mode = getActiveProviderName();
-    if (process.env.MONGODB_URI && !isDBConnected()) {
+    let dbStatus = 'not_configured';
+
+    if (hasDBConfig()) {
         try {
-            await connectDB();
+            await initDB();
+            const isAlive = await checkDB();
+            dbStatus = isAlive ? 'connected' : 'error';
         } catch {
-            // DB connection attempt failed
+            dbStatus = 'error';
         }
     }
 
@@ -31,7 +35,7 @@ app.get('/api/health', async (req, res) => {
         ok: true,
         service: 'Uma Chatbot',
         mode,
-        database: isDBConnected() ? 'connected' : (process.env.MONGODB_URI ? 'error' : 'not_configured'),
+        database: dbStatus,
     });
 });
 
@@ -107,9 +111,9 @@ if (require.main === module) {
     const server = app.listen(PORT, () => {
         console.log(`Uma chatbot is running at http://localhost:${PORT}`);
 
-        if (process.env.MONGODB_URI) {
-            connectDB().catch(err => {
-                console.warn('MongoDB connection error on startup:', err.message);
+        if (hasDBConfig()) {
+            initDB().catch(err => {
+                console.warn('Neon DB connection error on startup:', err.message);
             });
         }
     });
