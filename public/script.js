@@ -73,10 +73,12 @@ const SIDEBAR_KEY = 'uma-sidebar-state';
 const LEGACY_STORAGE_KEY = 'uma-chat-history';
 const AUTH_TOKEN_KEY = 'uma-auth-token';
 const AUTH_USER_KEY = 'uma-auth-user';
+const TAB_SESSION_KEY = 'uma-tab-session-active';
+const TAB_CHAT_KEY = 'uma-tab-chat-id';
 
 // State
 let conversations = loadConversations();
-let activeChatId = loadActiveChatId();
+let activeChatId = initTabChat();
 let isGenerating = false;
 let toastTimeout = null;
 let authMode = 'signin'; // 'signin' | 'signup'
@@ -785,33 +787,80 @@ function createBlankConversation() {
 }
 
 function createConversation() {
+    // If the top chat is already empty, switch to it
+    const topConv = conversations[0];
+    if (topConv && (!topConv.messages || topConv.messages.length === 0)) {
+        activeChatId = topConv.id;
+        sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
+        saveConversations();
+        return topConv;
+    }
+
     const conv = createBlankConversation();
     conversations.unshift(conv);
     activeChatId = conv.id;
+    sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
     saveConversations();
     return conv;
 }
 
-function loadActiveChatId() {
-    return localStorage.getItem(ACTIVE_CHAT_KEY) || (conversations[0] && conversations[0].id) || '';
+function initTabChat() {
+    const isExistingTab = sessionStorage.getItem(TAB_SESSION_KEY) === 'true';
+    const savedTabChatId = sessionStorage.getItem(TAB_CHAT_KEY);
+
+    // If this tab was refreshed, keep the conversation that was already open here
+    if (isExistingTab && savedTabChatId && conversations.some(c => c.id === savedTabChatId)) {
+        return savedTabChatId;
+    }
+
+    // This is a BRAND NEW TAB:
+    sessionStorage.setItem(TAB_SESSION_KEY, 'true');
+
+    // If the most recent conversation is already empty (brand new), use it
+    const topConv = conversations[0];
+    const isTopEmpty = topConv && (!topConv.messages || topConv.messages.length === 0);
+
+    if (isTopEmpty) {
+        sessionStorage.setItem(TAB_CHAT_KEY, topConv.id);
+        localStorage.setItem(ACTIVE_CHAT_KEY, topConv.id);
+        return topConv.id;
+    }
+
+    // Previous chats exist with messages:
+    // Automatically open a fresh new chat for this new tab and preserve all previous chats in history
+    const freshChat = createBlankConversation();
+    conversations.unshift(freshChat);
+    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+    localStorage.setItem(ACTIVE_CHAT_KEY, freshChat.id);
+    sessionStorage.setItem(TAB_CHAT_KEY, freshChat.id);
+
+    return freshChat.id;
 }
 
 function getActiveConversation() {
-    return conversations.find(c => c.id === activeChatId);
+    let conv = conversations.find(c => c.id === activeChatId);
+    if (!conv) {
+        conv = conversations[0] || createBlankConversation();
+        activeChatId = conv.id;
+    }
+    return conv;
 }
 
 function saveConversations() {
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
     localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+    sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
 }
 
 function clearAllHistory() {
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     localStorage.removeItem(CONVERSATIONS_KEY);
     localStorage.removeItem(ACTIVE_CHAT_KEY);
+    sessionStorage.removeItem(TAB_CHAT_KEY);
 
     conversations = [createBlankConversation()];
     activeChatId = conversations[0].id;
+    sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
     saveConversations();
     renderHistory();
     renderMessages();
