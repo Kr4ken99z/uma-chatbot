@@ -1,10 +1,10 @@
 /**
  * Uma Chatbot — Application Logic
- * Supports real-time streaming, conversation history, dark/paper theme toggle,
- * collapsible sidebar, prompt pools, and modal management.
+ * Real-time SSE streaming, conversation management, dark/paper theme toggle,
+ * collapsible sidebar, prompt pools, and full Sign In / Sign Up authentication.
  */
 
-// DOM References
+// DOM References — Main Interface
 const shell = document.getElementById('shell');
 const sidebarToggle = document.getElementById('sidebarToggle');
 const newChat = document.getElementById('newChat');
@@ -29,6 +29,7 @@ const toast = document.getElementById('toast');
 // Quick Toolbar Elements
 const toolNew = document.getElementById('toolNew');
 const toolFocus = document.getElementById('toolFocus');
+const toolUser = document.getElementById('toolUser');
 const toolTheme = document.getElementById('toolTheme');
 const toolAbout = document.getElementById('toolAbout');
 
@@ -38,12 +39,48 @@ const aboutModal = document.getElementById('aboutModal');
 const aboutBackdrop = document.getElementById('aboutBackdrop');
 const closeAbout = document.getElementById('closeAbout');
 
+// Auth DOM Elements
+const openAuthBtn = document.getElementById('openAuthBtn');
+const userProfile = document.getElementById('userProfile');
+const userAvatar = document.getElementById('userAvatar');
+const userName = document.getElementById('userName');
+const userEmail = document.getElementById('userEmail');
+const logoutBtn = document.getElementById('logoutBtn');
+const authModal = document.getElementById('authModal');
+const authBackdrop = document.getElementById('authBackdrop');
+const closeAuth = document.getElementById('closeAuth');
+const tabSignIn = document.getElementById('tabSignIn');
+const tabSignUp = document.getElementById('tabSignUp');
+const authErrorAlert = document.getElementById('authErrorAlert');
+const authSuccessAlert = document.getElementById('authSuccessAlert');
+const authForm = document.getElementById('authForm');
+const nameGroup = document.getElementById('nameGroup');
+const authName = document.getElementById('authName');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authSwitchText = document.getElementById('authSwitchText');
+const switchAuthMode = document.getElementById('switchAuthMode');
+const authTitle = document.getElementById('authTitle');
+const authSubtitle = document.getElementById('authSubtitle');
+
 // Storage Keys
 const CONVERSATIONS_KEY = 'uma-chat-conversations';
 const ACTIVE_CHAT_KEY = 'uma-active-chat';
 const THEME_KEY = 'uma-theme-preference';
 const SIDEBAR_KEY = 'uma-sidebar-state';
 const LEGACY_STORAGE_KEY = 'uma-chat-history';
+const AUTH_TOKEN_KEY = 'uma-auth-token';
+const AUTH_USER_KEY = 'uma-auth-user';
+
+// State
+let conversations = loadConversations();
+let activeChatId = loadActiveChatId();
+let isGenerating = false;
+let toastTimeout = null;
+let authMode = 'signin'; // 'signin' | 'signup'
+let currentUser = loadCurrentUser();
+let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
 
 // Prompt Pool
 const promptPool = [
@@ -57,15 +94,12 @@ const promptPool = [
     { icon: '◌', label: 'SQL joins', prompt: 'Explain SQL inner join, left join, and full outer join with a concrete example.' },
 ];
 
-let conversations = loadConversations();
-let activeChatId = loadActiveChatId();
-let isGenerating = false;
-let toastTimeout = null;
-
 // Initialize Application
 initShortcuts();
 initSidebarState();
 initTheme();
+updateAuthUI();
+verifySession();
 renderPrompts();
 renderHistory();
 renderMessages();
@@ -73,7 +107,7 @@ autoResizeInput();
 checkHealth();
 focusInput();
 
-// Event Listeners
+// Event Listeners — Chat Form & Input
 chatForm.addEventListener('submit', handleFormSubmit);
 messageInput.addEventListener('input', () => {
     autoResizeInput();
@@ -118,6 +152,16 @@ toolFocus.addEventListener('click', () => {
     showToast('Composer focused');
 });
 
+if (toolUser) {
+    toolUser.addEventListener('click', () => {
+        if (currentUser) {
+            showToast(`Signed in as ${currentUser.name}`);
+        } else {
+            openAuthModal();
+        }
+    });
+}
+
 toolTheme.addEventListener('click', () => {
     toggleTheme();
 });
@@ -126,15 +170,30 @@ toolAbout.addEventListener('click', () => {
     openAboutModal();
 });
 
-// Modal handlers
+// About Modal handlers
 aboutUma.addEventListener('click', openAboutModal);
 closeAbout.addEventListener('click', closeAboutModal);
 aboutBackdrop.addEventListener('click', closeAboutModal);
 
+// Auth Portal handlers
+if (openAuthBtn) openAuthBtn.addEventListener('click', openAuthModal);
+if (closeAuth) closeAuth.addEventListener('click', closeAuthModal);
+if (authBackdrop) authBackdrop.addEventListener('click', closeAuthModal);
+if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+
+if (tabSignIn) tabSignIn.addEventListener('click', () => switchAuthTab('signin'));
+if (tabSignUp) tabSignUp.addEventListener('click', () => switchAuthTab('signup'));
+if (switchAuthMode) switchAuthMode.addEventListener('click', () => {
+    switchAuthTab(authMode === 'signin' ? 'signup' : 'signin');
+});
+if (authForm) authForm.addEventListener('submit', handleAuthSubmit);
+
+// Global Keydown
 document.addEventListener('keydown', event => {
-    // Escape closes modal
-    if (event.key === 'Escape' && !aboutModal.hidden) {
-        closeAboutModal();
+    // Escape closes any open modal
+    if (event.key === 'Escape') {
+        if (!aboutModal.hidden) closeAboutModal();
+        if (authModal && !authModal.hidden) closeAuthModal();
     }
 
     // Ctrl+K or Cmd+K creates a new chat
@@ -159,20 +218,218 @@ welcomeCards.querySelectorAll('.card').forEach(card => {
 });
 
 // -----------------------------------------------------------------------------
+// Authentication Logic (Sign In / Sign Up)
+// -----------------------------------------------------------------------------
+
+function loadCurrentUser() {
+    try {
+        const saved = localStorage.getItem(AUTH_USER_KEY);
+        return saved ? JSON.parse(saved) : null;
+    } catch {
+        return null;
+    }
+}
+
+function updateAuthUI() {
+    if (currentUser) {
+        if (openAuthBtn) openAuthBtn.style.display = 'none';
+        if (userProfile) {
+            userProfile.style.display = 'flex';
+            const initial = (currentUser.name || currentUser.email || 'U').charAt(0).toUpperCase();
+            userAvatar.textContent = initial;
+            userName.textContent = currentUser.name || 'User';
+            userEmail.textContent = currentUser.email || '';
+        }
+        if (toolUser) {
+            toolUser.setAttribute('aria-label', `Account: ${currentUser.name}`);
+        }
+    } else {
+        if (openAuthBtn) openAuthBtn.style.display = 'flex';
+        if (userProfile) userProfile.style.display = 'none';
+        if (toolUser) {
+            toolUser.setAttribute('aria-label', 'Sign In / Sign Up');
+        }
+    }
+}
+
+function openAuthModal() {
+    clearAuthAlerts();
+    authModal.hidden = false;
+    authBackdrop.hidden = false;
+    document.body.classList.add('modal-open');
+    if (authMode === 'signup') {
+        authName.focus();
+    } else {
+        authEmail.focus();
+    }
+}
+
+function closeAuthModal() {
+    authModal.hidden = true;
+    authBackdrop.hidden = true;
+    document.body.classList.remove('modal-open');
+    clearAuthAlerts();
+}
+
+function switchAuthTab(mode) {
+    authMode = mode;
+    clearAuthAlerts();
+
+    if (mode === 'signup') {
+        tabSignUp.classList.add('active');
+        tabSignUp.setAttribute('aria-selected', 'true');
+        tabSignIn.classList.remove('active');
+        tabSignIn.setAttribute('aria-selected', 'false');
+
+        nameGroup.style.display = 'flex';
+        authName.required = true;
+        authTitle.textContent = 'Create an Account';
+        authSubtitle.textContent = 'Register to sync your chats across sessions.';
+        authSubmitBtn.querySelector('span').textContent = 'Create Account';
+        authSwitchText.innerHTML = `Already have an account? <button type="button" id="switchAuthMode">Sign In</button>`;
+        document.getElementById('switchAuthMode').addEventListener('click', () => switchAuthTab('signin'));
+        authName.focus();
+    } else {
+        tabSignIn.classList.add('active');
+        tabSignIn.setAttribute('aria-selected', 'true');
+        tabSignUp.classList.remove('active');
+        tabSignUp.setAttribute('aria-selected', 'false');
+
+        nameGroup.style.display = 'none';
+        authName.required = false;
+        authTitle.textContent = 'Welcome to Uma';
+        authSubtitle.textContent = 'Sign in or register to sync your chats.';
+        authSubmitBtn.querySelector('span').textContent = 'Sign In';
+        authSwitchText.innerHTML = `Don't have an account? <button type="button" id="switchAuthMode">Create one</button>`;
+        document.getElementById('switchAuthMode').addEventListener('click', () => switchAuthTab('signup'));
+        authEmail.focus();
+    }
+}
+
+function clearAuthAlerts() {
+    if (authErrorAlert) {
+        authErrorAlert.style.display = 'none';
+        authErrorAlert.textContent = '';
+    }
+    if (authSuccessAlert) {
+        authSuccessAlert.style.display = 'none';
+        authSuccessAlert.textContent = '';
+    }
+}
+
+function setAuthError(message) {
+    if (authSuccessAlert) authSuccessAlert.style.display = 'none';
+    if (authErrorAlert) {
+        authErrorAlert.textContent = message;
+        authErrorAlert.style.display = 'block';
+    }
+}
+
+function setAuthSuccess(message) {
+    if (authErrorAlert) authErrorAlert.style.display = 'none';
+    if (authSuccessAlert) {
+        authSuccessAlert.textContent = message;
+        authSuccessAlert.style.display = 'block';
+    }
+}
+
+async function handleAuthSubmit(event) {
+    event.preventDefault();
+    clearAuthAlerts();
+
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    const name = authName.value.trim();
+
+    authSubmitBtn.disabled = true;
+    const origBtnText = authSubmitBtn.querySelector('span').textContent;
+    authSubmitBtn.querySelector('span').textContent = authMode === 'signup' ? 'Creating...' : 'Signing in...';
+
+    try {
+        const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+        const payload = authMode === 'signup' ? { name, email, password } : { email, password };
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+            throw new Error(data.error || 'Authentication failed. Please try again.');
+        }
+
+        // Save session
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem(AUTH_TOKEN_KEY, authToken);
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
+
+        updateAuthUI();
+        setAuthSuccess(authMode === 'signup' ? 'Account created successfully!' : 'Signed in successfully!');
+
+        setTimeout(() => {
+            closeAuthModal();
+            showToast(`Welcome, ${currentUser.name}!`);
+        }, 600);
+
+    } catch (err) {
+        setAuthError(err.message);
+    } finally {
+        authSubmitBtn.disabled = false;
+        authSubmitBtn.querySelector('span').textContent = origBtnText;
+    }
+}
+
+async function verifySession() {
+    if (!authToken) return;
+
+    try {
+        const res = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${authToken}` },
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data.ok && data.user) {
+                currentUser = data.user;
+                localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
+                updateAuthUI();
+                return;
+            }
+        }
+        // If expired or invalid
+        handleLogout(false);
+    } catch {
+        // Offline or connection error; keep local user session
+    }
+}
+
+function handleLogout(shouldNotify = true) {
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    updateAuthUI();
+
+    if (shouldNotify) {
+        showToast('Signed out of Uma');
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Core Actions & Submission
 // -----------------------------------------------------------------------------
 
 async function handleFormSubmit(event) {
     event.preventDefault();
 
-    if (isGenerating) {
-        return;
-    }
+    if (isGenerating) return;
 
     const text = messageInput.value.trim();
-    if (!text) {
-        return;
-    }
+    if (!text) return;
 
     messageInput.value = '';
     autoResizeInput();
@@ -224,11 +481,14 @@ async function streamUmaResponse(userPrompt) {
     };
 
     try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({ message: userPrompt }),
         });
 
@@ -478,7 +738,6 @@ function loadConversations() {
         // Fall through
     }
 
-    // Try migrating legacy history
     const legacy = loadLegacyConversation();
     if (legacy) return [legacy];
 
@@ -615,7 +874,6 @@ function createId() {
 
 function renderPrompts() {
     promptsList.innerHTML = '';
-    // Select 3 random prompts from the pool
     const shuffled = [...promptPool].sort(() => 0.5 - Math.random()).slice(0, 3);
 
     shuffled.forEach(item => {
@@ -738,7 +996,6 @@ async function checkHealth() {
             }
         }
     } catch {
-        // Backend offline or running statically
         providerBadge.textContent = 'OFFLINE';
         updateStatus(false, 'Disconnected');
     }

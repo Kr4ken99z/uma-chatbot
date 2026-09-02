@@ -3,12 +3,17 @@ const path = require('path');
 require('dotenv').config();
 
 const { sendMessage, streamMessage, getActiveProviderName } = require('./services/chatApi');
+const authRouter = require('./routes/auth');
+const { connectDB, isDBConnected } = require('./utils/db');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json({ limit: '1mb' }));
+
+// Mount auth routes
+app.use('/api/auth', authRouter);
 
 app.get('/api/health', (req, res) => {
     const mode = getActiveProviderName();
@@ -17,6 +22,7 @@ app.get('/api/health', (req, res) => {
         ok: true,
         service: 'Uma Chatbot',
         mode,
+        database: isDBConnected() ? 'connected' : (process.env.MONGODB_URI ? 'connecting' : 'not_configured'),
     });
 });
 
@@ -91,6 +97,12 @@ app.post('/api/chat/stream', async (req, res) => {
 if (require.main === module) {
     const server = app.listen(PORT, () => {
         console.log(`Uma chatbot is running at http://localhost:${PORT}`);
+
+        if (process.env.MONGODB_URI) {
+            connectDB().catch(err => {
+                console.warn('MongoDB connection error on startup:', err.message);
+            });
+        }
     });
 
     server.on('error', error => {
