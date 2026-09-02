@@ -697,30 +697,102 @@ a {
 }
 
 .stream {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
     color: var(--muted);
-    font-size: 0.72rem;
+    font-size: 0.76rem;
+    font-weight: 500;
     background: var(--paper-card);
     border: 1px solid var(--line);
-    padding: 6px 12px;
-    border-radius: 20px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    transition: all 0.25s ease;
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
-.stream b {
-    color: var(--mint2);
-    letter-spacing: 2px;
-    font-family: var(--font-mono);
+.stream-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #94a3b8;
+    transition: background 0.2s ease;
 }
 
-.stream.active b {
-    animation: waveAnim 1s infinite alternate;
+.stream-wave {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2.5px;
+    height: 13px;
 }
 
-@keyframes waveAnim {
-    0% { opacity: 0.35; }
-    100% { opacity: 1; }
+.stream-wave span {
+    display: inline-block;
+    width: 2.5px;
+    height: 4px;
+    border-radius: 2px;
+    background: #94a3b8;
+    transition: all 0.2s ease;
+}
+
+/* Active State When Streaming Responses */
+.stream.active {
+    border-color: rgba(92, 225, 166, 0.45);
+    background: rgba(92, 225, 166, 0.08);
+    color: var(--ink);
+    box-shadow: 0 2px 10px rgba(92, 225, 166, 0.15);
+}
+
+.stream.active .stream-dot {
+    background: var(--mint, #5ce1a6);
+    box-shadow: 0 0 8px var(--mint, #5ce1a6);
+    animation: streamDotPulse 1.2s infinite ease-in-out;
+}
+
+.stream.active .stream-wave span {
+    background: var(--mint, #5ce1a6);
+    animation: streamWaveBar 0.9s infinite ease-in-out alternate;
+}
+
+.stream.active .stream-wave span:nth-child(1) {
+    animation-delay: 0.0s;
+    height: 6px;
+}
+.stream.active .stream-wave span:nth-child(2) {
+    animation-delay: 0.2s;
+    height: 13px;
+}
+.stream.active .stream-wave span:nth-child(3) {
+    animation-delay: 0.4s;
+    height: 9px;
+}
+.stream.active .stream-wave span:nth-child(4) {
+    animation-delay: 0.15s;
+    height: 11px;
+}
+
+@keyframes streamWaveBar {
+    0% {
+        transform: scaleY(0.25);
+    }
+    50% {
+        transform: scaleY(1);
+    }
+    100% {
+        transform: scaleY(0.4);
+    }
+}
+
+@keyframes streamDotPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.85);
+    }
 }
 
 /* ==========================================================================
