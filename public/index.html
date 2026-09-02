@@ -3,124 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uma - AI Chatbot</title>
+    <title>Uma — Thoughtful AI Companion</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main class="app-shell">
-        <aside class="sidebar-panel" aria-label="Chat history and contact">
-            <div class="sidebar-top">
-                <div class="sidebar-brand">
-                    <span class="brand-mark">U</span>
-                    <div>
-                        <strong>Uma</strong>
-                        <small>AI chat</small>
+    <main class="shell" id="shell">
+        <!-- Sidebar Toggle -->
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar" title="Toggle sidebar">‹</button>
+
+        <!-- Sidebar Navigation -->
+        <aside class="side" id="sidebar" aria-label="Navigation and history">
+            <div class="brand">
+                <span class="logo">U</span>
+                <div>
+                    <strong>Uma</strong>
+                    <small id="brandSubtitle">● AI companion</small>
+                </div>
+                <span class="beta" id="providerBadge">LIVE</span>
+            </div>
+
+            <button class="new" id="newChat" type="button">
+                <span class="plus">＋</span>
+                <span>New conversation</span>
+                <span class="shortcut" id="shortcutBadge">⌘ K</span>
+            </button>
+
+            <section class="history-section" aria-label="Chat history">
+                <div class="section-label-row">
+                    <span class="label">Recent chats</span>
+                    <button class="text-button" id="clearChat" type="button" title="Clear all chat history">Clear</button>
+                </div>
+                <div class="history" id="historyList" role="list"></div>
+            </section>
+
+            <section class="prompts" aria-label="Suggested prompts">
+                <p class="label">Try asking Uma</p>
+                <div id="promptsList" style="display:flex; flex-direction:column; gap:4px;"></div>
+            </section>
+
+            <div class="side-foot">
+                <div class="foot-note">⌁ Thoughtful AI companion</div>
+                <button class="about" id="aboutUma" type="button">
+                    <span>?</span> &nbsp; About Uma <span class="arrow">↗</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Quick Floating Toolbar -->
+        <nav class="hover-toolbar" aria-label="Quick toolbar">
+            <button class="tool" id="toolNew" type="button" aria-label="New conversation" data-tool="New chat">＋</button>
+            <button class="tool" id="toolFocus" type="button" aria-label="Focus composer" data-tool="Focus composer">✦</button>
+            <span class="tool-divider"></span>
+            <button class="tool" id="toolTheme" type="button" aria-label="Toggle theme" data-tool="Toggle theme">◐</button>
+            <button class="tool" id="toolAbout" type="button" aria-label="About Uma" data-tool="About Uma">?</button>
+        </nav>
+
+        <!-- Main Workspace -->
+        <section class="main" aria-label="Conversation space">
+            <header class="top">
+                <div>
+                    <div class="eyebrow">
+                        <span class="online" id="statusDot"></span>
+                        <span id="connectionStatus">Online</span>
+                    </div>
+                    <h1>Uma <span class="coral-spark">✦</span></h1>
+                    <p id="headerSubtitle">A calmer place to think out loud.</p>
+                </div>
+                <div class="stream" id="streamStatus">
+                    <span>Streaming responses</span> &nbsp;<b>▂▅▃</b>
+                </div>
+            </header>
+
+            <!-- Scrollable Messages Area -->
+            <div class="messages" id="chatMessages" aria-live="polite">
+                <!-- Welcome View (Visible when starting fresh) -->
+                <div class="welcome" id="welcomeView">
+                    <div class="welcome-kicker"><span>✦</span> Your thoughtful AI companion</div>
+                    <h2>What will we <em>figure out</em> today?</h2>
+                    <p>Ask Uma to explain, create, plan, or explore. Start with a prompt below, or write your own message.</p>
+
+                    <div class="cards" id="welcomeCards">
+                        <button class="card" type="button" data-prompt="Help me plan a personal portfolio website step by step.">
+                            <i>✦</i>
+                            <strong>Plan a project</strong>
+                            <small>Turn a rough idea into a clear plan.</small>
+                        </button>
+                        <button class="card" type="button" data-prompt="Explain recursion with a simple real-world example.">
+                            <i>◌</i>
+                            <strong>Learn something</strong>
+                            <small>Get a simple, step-by-step explanation.</small>
+                        </button>
+                        <button class="card" type="button" data-prompt="Rewrite this text to sound concise, natural, and professional.">
+                            <i>✎</i>
+                            <strong>Make it sharper</strong>
+                            <small>Improve your writing in seconds.</small>
+                        </button>
                     </div>
                 </div>
 
-                <button class="new-chat-button" id="newChat" type="button">+ New chat</button>
+                <!-- Active Chat Messages Flow -->
+                <div class="messages-flow" id="messagesFlow"></div>
             </div>
 
-            <section class="sidebar-section" aria-label="Conversation history">
-                <div class="section-header">
-                    <span>History</span>
-                    <button class="text-button" id="clearChat" type="button">Clear</button>
+            <!-- Composer / Input Section -->
+            <div class="composer">
+                <div class="hint">
+                    <span>Uma can help with code, writing, ideas, and more</span>
+                    <span>Enter to send · Shift + Enter for new line</span>
                 </div>
-                <div class="history-list" id="historyList"></div>
-            </section>
-
-            <section class="sidebar-section" aria-label="Quick prompts">
-                <p class="section-label">Prompts</p>
-                <div class="quick-prompts">
-                    <button type="button" data-prompt="Give me 3 Java project ideas for my portfolio.">Java ideas</button>
-                    <button type="button" data-prompt="Explain REST API in simple words.">REST API</button>
-                    <button type="button" data-prompt="Help me write a professional project description.">Project text</button>
-                </div>
-            </section>
-
-            <section class="sidebar-section about-entry" aria-label="About Uma">
-                <button class="about-button" id="aboutUma" type="button">About Uma</button>
-            </section>
-        </aside>
-
-        <section class="chat-panel" aria-label="Chat with Uma">
-            <header class="chat-header">
-                <div>
-                    <h1>Uma</h1>
-                    <p>Answers stream as they are written.</p>
-                </div>
-                <span class="sr-only" id="connectionStatus">Ready</span>
-            </header>
-
-            <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
-
-            <form class="chat-input" id="chatForm">
-                <label class="sr-only" for="messageInput">Message</label>
-                <textarea
-                    id="messageInput"
-                    name="message"
-                    placeholder="Message Uma..."
-                    autocomplete="off"
-                    rows="1"
-                    required
-                ></textarea>
-                <button id="sendBtn" type="submit">
-                    Send
-                    <span aria-hidden="true">-&gt;</span>
-                </button>
-            </form>
+                <form class="form" id="chatForm">
+                    <div class="input">
+                        <span class="spark" aria-hidden="true">✦</span>
+                        <textarea
+                            id="messageInput"
+                            name="message"
+                            placeholder="Ask Uma anything..."
+                            autocomplete="off"
+                            rows="1"
+                            required
+                        ></textarea>
+                        <button class="attach" id="clearInputBtn" type="button" title="Clear text" aria-label="Clear input">✕</button>
+                    </div>
+                    <button class="send" id="sendBtn" type="submit">
+                        <span>Send</span> <b>↗</b>
+                    </button>
+                </form>
+            </div>
         </section>
     </main>
 
+    <!-- Floating Toast Notification -->
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <!-- About Modal Dialog -->
     <div class="modal-backdrop" id="aboutBackdrop" hidden></div>
     <section class="about-modal" id="aboutModal" aria-labelledby="aboutTitle" aria-modal="true" role="dialog" hidden>
-        <button class="modal-close" id="closeAbout" type="button" aria-label="Close About Uma">&times;</button>
+        <button class="modal-close" id="closeAbout" type="button" aria-label="Close About dialog">&times;</button>
         <div class="modal-brand">
-            <span class="brand-mark">U</span>
+            <span class="logo">U</span>
             <h2 id="aboutTitle">Uma</h2>
-            <p>Focused AI help for code, projects, writing, and learning.</p>
+            <p>Focused AI companion for code, architecture, writing, and clear thinking.</p>
         </div>
 
         <div class="about-content">
             <section>
                 <h3>About Uma</h3>
                 <p>
-                    Uma is a personal AI assistant built to answer clearly, stream responses line by line, and keep your conversations available in local history.
+                    Uma is a personal AI assistant built to answer clearly, stream responses in real-time, and keep your conversations available in local history.
                 </p>
                 <p>
-                    Ask about Java, REST APIs, portfolio ideas, debugging, project descriptions, interview prep, or anything you want to understand step by step.
+                    Ask about Java, Python, REST APIs, portfolio ideas, system debugging, project text, interview prep, or explore any concept step by step.
                 </p>
             </section>
 
             <section>
                 <h3>How History Works</h3>
                 <p>
-                    Your chat history is saved only in this browser through local storage. Use New chat to start fresh, or Clear to remove all saved conversations.
+                    Your chat history is saved right here in your browser through local storage. Use <strong>New conversation</strong> to start fresh, or <strong>Clear</strong> to wipe stored history.
                 </p>
             </section>
 
             <section>
                 <h3>Privacy</h3>
                 <p>
-                    Messages are sent to the local Uma server and then to Gemini for AI responses. Your sidebar history stays on your device unless you clear browser data.
+                    Messages are processed via Uma's backend services with streaming support. Your sidebar history remains locally on your device unless cleared.
                 </p>
             </section>
 
             <section>
-                <h3>Contact</h3>
+                <h3>Contact &amp; Connect</h3>
                 <p>
-                    For feedback, project discussion, or questions, contact Koustav at
-                    <a href="mailto:dev.codewithkoustav@gmail.com">dev.codewithkoustav@gmail.com</a>.
+                    Built by Koustav. For feedback, feature requests, or collaboration, get in touch:
                 </p>
-                <p class="about-links">
-                    <a href="https://www.linkedin.com/in/koustav07" target="_blank" rel="noreferrer">LinkedIn</a>
-                    <a href="https://github.com/Kr4ken99z" target="_blank" rel="noreferrer">GitHub</a>
-                    <a href="https://t.me/kr4ken07" target="_blank" rel="noreferrer">Telegram</a>
-                </p>
-            </section>
+                <div class="about-links">
+                    <a href="mailto:dev.codewithkoustav@gmail.com">dev.codewithkoustav@gmail.com</a>
+                    <a href="https://www.linkedin.com/in/koustav07" target="_blank" rel="noreferrer">LinkedIn ↗</a>
+                    <a href="https://github.com/Kr4ken99z" target="_blank" rel="noreferrer">GitHub ↗</a>
+                    <a href="https://t.me/kr4ken07" target="_blank" rel="noreferrer">Telegram ↗</a>
+                </div>
+            </div>
         </div>
     </section>
 
-    <script src="script.js?v=about-dark-1"></script>
+    <script src="script.js?v=uma-v2"></script>
 </body>
 </html>
