@@ -76,6 +76,61 @@ const AUTH_TOKEN_KEY = 'uma-auth-token';
 const AUTH_USER_KEY = 'uma-auth-user';
 const TAB_SESSION_KEY = 'uma-tab-session-active';
 const TAB_CHAT_KEY = 'uma-tab-chat-id';
+const GUEST_CHAT_KEY = 'uma_guest_chat_count';
+const GUEST_CHAT_LIMIT = 5;
+
+// Guest Limit Elements
+const guestCounterBadge = document.getElementById('guestCounterBadge');
+const guestChatsLeft = document.getElementById('guestChatsLeft');
+const guestLimitModal = document.getElementById('guestLimitModal');
+const guestLimitBackdrop = document.getElementById('guestLimitBackdrop');
+const closeGuestLimitBtn = document.getElementById('closeGuestLimitBtn');
+const guestModalSignUpBtn = document.getElementById('guestModalSignUpBtn');
+const guestModalSignInBtn = document.getElementById('guestModalSignInBtn');
+
+function getGuestChatCount() {
+    return parseInt(localStorage.getItem(GUEST_CHAT_KEY) || '0', 10);
+}
+
+function incrementGuestChatCount() {
+    const cur = getGuestChatCount() + 1;
+    localStorage.setItem(GUEST_CHAT_KEY, String(cur));
+    updateGuestCounterUI();
+    return cur;
+}
+
+function resetGuestChatCount() {
+    localStorage.removeItem(GUEST_CHAT_KEY);
+    updateGuestCounterUI();
+}
+
+function updateGuestCounterUI() {
+    if (!guestCounterBadge || !guestChatsLeft) return;
+    if (authToken) {
+        guestCounterBadge.style.display = 'none';
+        return;
+    }
+    const count = getGuestChatCount();
+    const remaining = Math.max(0, GUEST_CHAT_LIMIT - count);
+    guestChatsLeft.textContent = String(remaining);
+    guestCounterBadge.style.display = 'inline-flex';
+}
+
+function showGuestLimitModal() {
+    if (guestLimitModal && guestLimitBackdrop) {
+        guestLimitModal.hidden = false;
+        guestLimitBackdrop.hidden = false;
+        document.body.classList.add('modal-open');
+    }
+}
+
+function closeGuestLimitModal() {
+    if (guestLimitModal && guestLimitBackdrop) {
+        guestLimitModal.hidden = true;
+        guestLimitBackdrop.hidden = true;
+        document.body.classList.remove('modal-open');
+    }
+}
 
 // State
 let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
@@ -206,12 +261,42 @@ if (switchAuthMode) switchAuthMode.addEventListener('click', () => {
 });
 if (authForm) authForm.addEventListener('submit', handleAuthSubmit);
 
+// Guest Limit Modal Handlers
+if (closeGuestLimitBtn) closeGuestLimitBtn.addEventListener('click', closeGuestLimitModal);
+if (guestLimitBackdrop) guestLimitBackdrop.addEventListener('click', closeGuestLimitModal);
+if (guestModalSignUpBtn) {
+    guestModalSignUpBtn.addEventListener('click', () => {
+        closeGuestLimitModal();
+        switchAuthTab('signup');
+        openAuthModal();
+    });
+}
+if (guestModalSignInBtn) {
+    guestModalSignInBtn.addEventListener('click', () => {
+        closeGuestLimitModal();
+        switchAuthTab('signin');
+        openAuthModal();
+    });
+}
+if (guestCounterBadge) {
+    guestCounterBadge.addEventListener('click', () => {
+        const count = getGuestChatCount();
+        if (count >= GUEST_CHAT_LIMIT) {
+            showGuestLimitModal();
+        } else {
+            switchAuthTab('signup');
+            openAuthModal();
+        }
+    });
+}
+
 // Global Keydown
 document.addEventListener('keydown', event => {
     // Escape closes any open modal
     if (event.key === 'Escape') {
         if (!aboutModal.hidden) closeAboutModal();
         if (authModal && !authModal.hidden) closeAuthModal();
+        if (guestLimitModal && !guestLimitModal.hidden) closeGuestLimitModal();
     }
 
     // Ctrl+K or Cmd+K creates a new chat
@@ -268,6 +353,7 @@ function updateAuthUI() {
             toolUser.setAttribute('aria-label', 'Sign In / Sign Up');
         }
     }
+    updateGuestCounterUI();
 }
 
 function openAuthModal() {
@@ -519,6 +605,7 @@ function handleLogout(shouldNotify = true) {
     // Completely reset to a fresh blank start for the guest
     conversations = [createBlankConversation()];
     activeChatId = conversations[0].id;
+    resetGuestChatCount();
 
     updateAuthUI();
     renderHistory();
@@ -541,6 +628,12 @@ async function handleFormSubmit(event) {
 
     const text = messageInput.value.trim();
     if (!text) return;
+
+    if (!authToken && getGuestChatCount() >= GUEST_CHAT_LIMIT) {
+        showGuestLimitModal();
+        showToast('Guest chat limit reached. Please sign in to continue.');
+        return;
+    }
 
     messageInput.value = '';
     autoResizeInput();
@@ -576,6 +669,12 @@ function showWelcomeView() {
 // -----------------------------------------------------------------------------
 
 async function streamUmaResponse(userPrompt) {
+    if (!authToken && getGuestChatCount() >= GUEST_CHAT_LIMIT) {
+        showGuestLimitModal();
+        showToast('Guest chat limit reached. Please sign in to continue.');
+        return;
+    }
+
     setLoading(true);
     const typingId = addTypingIndicator();
     let botMessage = null;
@@ -611,7 +710,16 @@ async function streamUmaResponse(userPrompt) {
 
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
+            if (response.status === 403 && data.guestLimitReached) {
+                removeTypingIndicator(typingId);
+                showGuestLimitModal();
+                throw new Error(data.error || 'Guest limit reached (5 chats).');
+            }
             throw new Error(data.error || 'Uma could not respond right now.');
+        }
+
+        if (!authToken) {
+            incrementGuestChatCount();
         }
 
         updateStatus(true, 'Online');
@@ -931,53 +1039,163 @@ function renderMessages() {
     hideWelcomeView();
     messagesFlow.innerHTML = '';
 
-    conversation.messages.forEach(message => {
+    conversation.messages.forEach((message, index) => {
         if (!message.text && message.role === 'bot') return;
-        messagesFlow.appendChild(createMessageRow(message.role, message.text));
+        messagesFlow.appendChild(createMessageRow(message.role, message.text, index));
     });
 
     scrollToBottom();
 }
 
-function createMessageRow(role, text) {
+function createMessageRow(role, text, messageIndex) {
     const row = document.createElement('div');
     row.className = role === 'user' ? 'user-message' : 'uma-message';
+    if (typeof messageIndex === 'number') {
+        row.dataset.messageIndex = String(messageIndex);
+    }
 
     const avatar = document.createElement('div');
     avatar.className = 'avatar';
     avatar.textContent = role === 'user' ? 'You' : 'U';
 
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
     if (role === 'user') {
+        const container = document.createElement('div');
+        container.className = 'user-bubble-container';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
         bubble.textContent = text;
+
+        const actions = document.createElement('div');
+        actions.className = 'user-msg-actions';
+        actions.innerHTML = `
+            <button class="edit-msg-btn" type="button" title="Edit prompt" aria-label="Edit prompt">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span>Edit</span>
+            </button>
+        `;
+
+        container.append(bubble, actions);
+        row.append(avatar, container);
     } else {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
         bubble.innerHTML = formatMarkdown(text);
+        row.append(avatar, bubble);
     }
 
-    row.append(avatar, bubble);
     return row;
 }
 
-// Global copy button handler for code cards
+// Global click handler for code copy and message editing
 messagesFlow.addEventListener('click', (e) => {
-    const btn = e.target.closest('.copy-code-btn');
-    if (!btn) return;
+    // 1. Copy Code button
+    const copyBtn = e.target.closest('.copy-code-btn');
+    if (copyBtn) {
+        const rawCode = decodeURIComponent(copyBtn.getAttribute('data-raw-code') || '');
+        if (!rawCode) return;
 
-    const rawCode = decodeURIComponent(btn.getAttribute('data-raw-code') || '');
-    if (!rawCode) return;
+        navigator.clipboard.writeText(rawCode).then(() => {
+            copyBtn.classList.add('copied');
+            const label = copyBtn.querySelector('.copy-label');
+            if (label) label.textContent = 'Copied! ✓';
+            setTimeout(() => {
+                copyBtn.classList.remove('copied');
+                if (label) label.textContent = 'Copy';
+            }, 2000);
+        }).catch(() => {
+            showToast('Code copied');
+        });
+        return;
+    }
 
-    navigator.clipboard.writeText(rawCode).then(() => {
-        btn.classList.add('copied');
-        const label = btn.querySelector('.copy-label');
-        if (label) label.textContent = 'Copied! ✓';
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            if (label) label.textContent = 'Copy';
-        }, 2000);
-    }).catch(() => {
-        showToast('Code copied');
-    });
+    // 2. Edit User Message button
+    const editBtn = e.target.closest('.edit-msg-btn');
+    if (editBtn) {
+        if (isGenerating) {
+            showToast('Please wait for Uma to finish generating.');
+            return;
+        }
+
+        const row = editBtn.closest('.user-message');
+        if (!row) return;
+
+        const container = row.querySelector('.user-bubble-container');
+        const bubble = row.querySelector('.bubble');
+        if (!container || !bubble) return;
+
+        const originalText = bubble.textContent.trim();
+        const msgIdx = parseInt(row.dataset.messageIndex ?? '-1', 10);
+
+        container.style.display = 'none';
+
+        const editCard = document.createElement('div');
+        editCard.className = 'user-edit-card';
+        editCard.innerHTML = `
+            <textarea class="user-edit-textarea">${escapeHtml(originalText)}</textarea>
+            <div class="user-edit-buttons">
+                <button class="user-edit-cancel" type="button">Cancel</button>
+                <button class="user-edit-save" type="button">Save & Submit</button>
+            </div>
+        `;
+
+        row.appendChild(editCard);
+        const textarea = editCard.querySelector('.user-edit-textarea');
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        const cleanup = () => {
+            editCard.remove();
+            container.style.display = '';
+        };
+
+        editCard.querySelector('.user-edit-cancel').onclick = cleanup;
+
+        const saveAndSubmit = async () => {
+            const newText = textarea.value.trim();
+            if (!newText) return;
+            cleanup();
+
+            if (newText === originalText) return;
+
+            // Check guest limit before resubmitting
+            if (!authToken && getGuestChatCount() >= GUEST_CHAT_LIMIT) {
+                showGuestLimitModal();
+                showToast('Guest limit reached. Please sign in to continue.');
+                return;
+            }
+
+            // Prune conversation messages from this message index forward
+            const conv = getActiveConversation();
+            if (conv && msgIdx >= 0 && msgIdx < conv.messages.length) {
+                conv.messages = conv.messages.slice(0, msgIdx);
+            }
+
+            // Save and re-render messages up to the edit point
+            saveConversations();
+            renderMessages();
+
+            // Append edited user message and stream a fresh response!
+            addMessage('user', newText);
+            await streamUmaResponse(newText);
+        };
+
+        editCard.querySelector('.user-edit-save').onclick = saveAndSubmit;
+
+        textarea.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault();
+                saveAndSubmit();
+            } else if (ev.key === 'Escape') {
+                cleanup();
+            }
+        });
+
+        return;
+    }
 });
 
 function addMessage(role, text) {
@@ -994,7 +1212,8 @@ function addMessage(role, text) {
     saveConversations();
     renderHistory();
 
-    const row = createMessageRow(role, text);
+    const msgIndex = conversation.messages.length - 1;
+    const row = createMessageRow(role, text, msgIndex);
     messagesFlow.appendChild(row);
     scrollToBottom();
 
