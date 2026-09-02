@@ -77,13 +77,13 @@ const TAB_SESSION_KEY = 'uma-tab-session-active';
 const TAB_CHAT_KEY = 'uma-tab-chat-id';
 
 // State
+let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
+let currentUser = loadCurrentUser();
 let conversations = loadConversations();
 let activeChatId = initTabChat();
 let isGenerating = false;
 let toastTimeout = null;
-let authMode = 'signin'; // 'signin' | 'signup'
-let currentUser = loadCurrentUser();
-let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
+let authMode = 'signin'; // 'signin' | 'signup';
 
 // Prompt Pool
 const promptPool = [
