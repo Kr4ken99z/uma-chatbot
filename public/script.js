@@ -559,7 +559,7 @@ function handleStreamEvent(eventText, ensureBotMessage) {
 
     if (parsed.eventName === 'done') {
         if (parsed.data.isMock) {
-            providerBadge.textContent = 'DEMO';
+            if (providerBadge) providerBadge.textContent = 'DEMO';
             connectionStatus.textContent = 'Demo mode';
         }
         return false;
@@ -991,12 +991,12 @@ async function checkHealth() {
         if (res.ok) {
             const data = await res.json();
             if (data.mode) {
-                providerBadge.textContent = data.mode.toUpperCase();
+                if (providerBadge) providerBadge.textContent = data.mode.toUpperCase();
                 connectionStatus.textContent = data.mode === 'demo' ? 'Demo mode' : 'Online';
             }
         }
     } catch {
-        providerBadge.textContent = 'OFFLINE';
+        if (providerBadge) providerBadge.textContent = 'OFFLINE';
         updateStatus(false, 'Disconnected');
     }
 }
