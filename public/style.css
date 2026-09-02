@@ -935,6 +935,157 @@ body.dim-preview .user-message .avatar {
     background: var(--paper-bubble);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
     color: var(--ink);
+    white-space: pre-wrap;
+}
+
+.uma-message .bubble {
+    white-space: normal;
+}
+
+/* GitHub-Style Code Cards & Syntax Highlighting */
+.code-card {
+    margin: 16px 0;
+    border-radius: 12px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    color: #8b949e;
+    font-size: 0.8rem;
+    user-select: none;
+}
+
+.code-lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 600;
+    color: #c9d1d9;
+}
+
+.code-lang svg {
+    color: var(--mint, #5ce1a6);
+}
+
+.copy-code-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #c9d1d9;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.copy-code-btn:hover {
+    background: #30363d;
+    color: #ffffff;
+    border-color: #8b949e;
+}
+
+.copy-code-btn.copied {
+    background: #238636;
+    border-color: #2ea043;
+    color: #ffffff;
+}
+
+.code-pre {
+    margin: 0;
+    padding: 16px 18px;
+    background: #0d1117;
+    color: #e6edf3;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    tab-size: 4;
+    white-space: pre;
+}
+
+.code-body {
+    font-family: inherit;
+    font-size: inherit;
+}
+
+/* Syntax Highlighting Tokens (GitHub Dark Theme) */
+.token-comment {
+    color: #8b949e;
+    font-style: italic;
+}
+
+.token-string {
+    color: #7ee787; /* Green */
+}
+
+.token-keyword {
+    color: #ff7b72; /* Pink / Coral */
+    font-weight: 600;
+}
+
+.token-number {
+    color: #79c0ff; /* Blue */
+}
+
+.token-fn {
+    color: #d2a8ff; /* Purple */
+}
+
+/* Inline Code Badge */
+.inline-code {
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(175, 184, 193, 0.2);
+    color: #e06c75;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    font-weight: 550;
+}
+
+body.dark-theme .inline-code {
+    background: #21262d;
+    color: #ff7b72;
+}
+
+.bubble p {
+    margin: 0 0 12px 0;
+    line-height: 1.65;
+}
+
+.bubble p:last-child {
+    margin-bottom: 0;
+}
+
+.md-h2, .md-h3, .md-h4 {
+    margin: 16px 0 8px 0;
+    font-weight: 700;
+    color: inherit;
+}
+.md-h2 { font-size: 1.22rem; }
+.md-h3 { font-size: 1.1rem; }
+.md-h4 { font-size: 0.98rem; }
+
+.md-ul {
+    margin: 8px 0 12px 22px;
+    padding: 0;
+}
+
+.md-li {
+    margin-bottom: 4px;
+    line-height: 1.6;
 }
 
 /* Typing Indicator */

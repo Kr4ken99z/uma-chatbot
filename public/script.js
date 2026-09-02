@@ -726,6 +726,139 @@ function parseStreamEvent(eventText) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Markdown & GitHub-Style Code Card Formatter
+// -----------------------------------------------------------------------------
+
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function highlightSyntax(code) {
+    let html = escapeHtml(code);
+
+    // Comments: // ... or /* ... */ or # ...
+    const comments = [];
+    html = html.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/g, (match) => {
+        const id = `__COMM_${comments.length}__`;
+        comments.push(`<span class="token-comment">${match}</span>`);
+        return id;
+    });
+
+    // Strings: "..." or '...' or `...`
+    const strings = [];
+    html = html.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, (match) => {
+        const id = `__STR_${strings.length}__`;
+        strings.push(`<span class="token-string">${match}</span>`);
+        return id;
+    });
+
+    // Keywords (Java, Python, JS, TS, C++, Go, etc.)
+    const keywordsRegex = /\b(public|private|protected|class|interface|enum|extends|implements|static|final|abstract|void|int|boolean|double|float|char|byte|short|long|return|if|else|for|while|do|switch|case|default|break|continue|new|this|super|try|catch|finally|throw|throws|import|package|def|function|var|let|const|async|await|typeof|instanceof|from|as|null|true|false|undefined)\b/g;
+    html = html.replace(keywordsRegex, '<span class="token-keyword">$1</span>');
+
+    // Numbers
+    html = html.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, '<span class="token-number">$1</span>');
+
+    // Method calls / Functions: fnName(...)
+    html = html.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, '<span class="token-fn">$1</span>');
+
+    // Restore strings
+    strings.forEach((str, i) => {
+        html = html.replace(`__STR_${i}__`, str);
+    });
+
+    // Restore comments
+    comments.forEach((comm, i) => {
+        html = html.replace(`__COMM_${i}__`, comm);
+    });
+
+    return html;
+}
+
+function formatMarkdown(text) {
+    if (!text) return '';
+
+    const codeBlocks = [];
+
+    // 1. Extract fenced code blocks (supporting open blocks during streaming too)
+    let processed = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
+        const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+        codeBlocks.push({
+            lang: (lang || 'code').trim().toLowerCase(),
+            code: code.replace(/\r?\n$/, ''),
+        });
+        return placeholder;
+    });
+
+    // 2. Escape regular text
+    processed = escapeHtml(processed);
+
+    // 3. Bold: **text**
+    processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // 4. Italic: *text* or _text_
+    processed = processed.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+
+    // 5. Inline code: `code`
+    processed = processed.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
+
+    // 6. Headers
+    processed = processed.replace(/^### (.*$)/gim, '<h4 class="md-h4">$1</h4>');
+    processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h3">$1</h3>');
+    processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h2">$1</h2>');
+
+    // 7. Bullet lists
+    processed = processed.replace(/^\s*[-*]\s+(.*$)/gim, '<li class="md-li">$1</li>');
+    processed = processed.replace(/((?:<li class="md-li">.*?<\/li>\s*)+)/gis, '<ul class="md-ul">$1</ul>');
+
+    // 8. Line breaks: \n\n into <p>, single \n into <br>
+    processed = processed.replace(/\n\n+/g, '</p><p>');
+    processed = processed.replace(/\n/g, '<br>');
+    processed = `<p>${processed}</p>`;
+    processed = processed.replace(/<p>\s*<\/p>/g, '');
+
+    // 9. Reinsert GitHub-style code cards
+    codeBlocks.forEach((item, index) => {
+        const placeholder = `__CODE_BLOCK_${index}__`;
+        const langDisplay = item.lang ? (item.lang.charAt(0).toUpperCase() + item.lang.slice(1)) : 'Code';
+        const highlighted = highlightSyntax(item.code);
+        const encodedRawCode = encodeURIComponent(item.code);
+
+        const cardHtml = `
+            <div class="code-card">
+                <div class="code-header">
+                    <span class="code-lang">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="16 18 22 12 16 6"></polyline>
+                            <polyline points="8 6 2 12 8 18"></polyline>
+                        </svg>
+                        <span>${escapeHtml(langDisplay)}</span>
+                    </span>
+                    <button class="copy-code-btn" type="button" data-raw-code="${encodedRawCode}" aria-label="Copy code">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="copy-label">Copy</span>
+                    </button>
+                </div>
+                <pre class="code-pre"><code class="code-body language-${escapeHtml(item.lang)}">${highlighted}</code></pre>
+            </div>
+        `;
+
+        processed = processed.replace(new RegExp(`<p>\\s*${placeholder}\\s*<\\/p>`, 'g'), cardHtml);
+        processed = processed.replace(new RegExp(placeholder, 'g'), cardHtml);
+    });
+
+    return processed;
+}
+
 function updateStreamingMessage(messageObj, textElement, text) {
     const conversation = getActiveConversation();
     messageObj.text = text;
@@ -735,7 +868,7 @@ function updateStreamingMessage(messageObj, textElement, text) {
     }
 
     if (textElement) {
-        textElement.textContent = text;
+        textElement.innerHTML = formatMarkdown(text);
     }
 
     saveConversations();
@@ -816,11 +949,36 @@ function createMessageRow(role, text) {
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = text;
+    if (role === 'user') {
+        bubble.textContent = text;
+    } else {
+        bubble.innerHTML = formatMarkdown(text);
+    }
 
     row.append(avatar, bubble);
     return row;
 }
+
+// Global copy button handler for code cards
+messagesFlow.addEventListener('click', (e) => {
+    const btn = e.target.closest('.copy-code-btn');
+    if (!btn) return;
+
+    const rawCode = decodeURIComponent(btn.getAttribute('data-raw-code') || '');
+    if (!rawCode) return;
+
+    navigator.clipboard.writeText(rawCode).then(() => {
+        btn.classList.add('copied');
+        const label = btn.querySelector('.copy-label');
+        if (label) label.textContent = 'Copied! ✓';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            if (label) label.textContent = 'Copy';
+        }, 2000);
+    }).catch(() => {
+        showToast('Code copied');
+    });
+});
 
 function addMessage(role, text) {
     const conversation = getActiveConversation() || createConversation();

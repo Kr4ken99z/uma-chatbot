@@ -2,6 +2,7 @@ const { AI_PROVIDER } = require('../utils/config');
 const geminiApi = require('./geminiApi');
 const groqApi = require('./groqApi');
 const { createDemoReply, streamDemoReply } = require('./demo');
+const { getLiveContextIfApplicable } = require('./realtimeService');
 
 const providers = {
     gemini: geminiApi,
@@ -48,6 +49,9 @@ function getProviderOrder() {
 }
 
 async function sendMessage(userMessage, history = []) {
+    const liveContext = await getLiveContextIfApplicable(userMessage);
+    const enrichedMessage = liveContext ? `${liveContext}\n\nUser Question: ${userMessage}` : userMessage;
+
     const providerOrder = getProviderOrder();
 
     if (!providerOrder.length) {
@@ -61,7 +65,7 @@ async function sendMessage(userMessage, history = []) {
 
     for (const providerName of providerOrder) {
         try {
-            return await getProvider(providerName).sendMessage(userMessage, history);
+            return await getProvider(providerName).sendMessage(enrichedMessage, history);
         } catch (error) {
             lastError = error;
 
@@ -77,6 +81,9 @@ async function sendMessage(userMessage, history = []) {
 }
 
 async function streamMessage(userMessage, history = [], onChunk) {
+    const liveContext = await getLiveContextIfApplicable(userMessage);
+    const enrichedMessage = liveContext ? `${liveContext}\n\nUser Question: ${userMessage}` : userMessage;
+
     const providerOrder = getProviderOrder();
 
     if (!providerOrder.length) {
@@ -88,7 +95,7 @@ async function streamMessage(userMessage, history = [], onChunk) {
 
     for (const providerName of providerOrder) {
         try {
-            return await getProvider(providerName).streamMessage(userMessage, history, onChunk);
+            return await getProvider(providerName).streamMessage(enrichedMessage, history, onChunk);
         } catch (error) {
             lastError = error;
 
