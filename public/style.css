@@ -1,6 +1,6 @@
 /* ==========================================================================
    Uma — Design System & Stylesheet
-   Based on modern editorial paper + ink aesthetic with mint & coral accents
+   Modern editorial paper + ink aesthetic with mint & coral accents
    ========================================================================== */
 
 :root {
@@ -14,6 +14,7 @@
     --paper: #f7f6f2;
     --paper-card: #ffffff;
     --paper-subtle: #f1efe9;
+    --paper-bubble: #ffffff;
     --line: #dfe0d8;
     --line-dark: #2a353c;
     --line-focus: #72d7aa;
@@ -43,6 +44,7 @@ body.dim-preview {
     --paper: #0f1318;
     --paper-card: #161c22;
     --paper-subtle: #1a222a;
+    --paper-bubble: #1a222a;
     --line: #242f38;
     --ink: #f0f4f2;
     --muted: #889690;
@@ -56,9 +58,11 @@ body.dim-preview {
 }
 
 html, body {
-    min-height: 100%;
+    height: 100%;
+    height: 100svh;
     margin: 0;
     padding: 0;
+    overflow: hidden; /* Crucial: Prevents document window from rolling */
 }
 
 body {
@@ -68,7 +72,6 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-x: hidden;
     transition: background 0.25s ease, color 0.25s ease;
 }
 
@@ -90,32 +93,39 @@ a {
     text-decoration: none;
 }
 
-/* Layout Shell */
+/* ==========================================================================
+   Layout Shell — Pinned Viewport
+   ========================================================================== */
 .shell {
-    min-height: 100vh;
+    height: 100%;
+    height: 100svh;
+    max-height: 100svh;
     display: grid;
-    grid-template-columns: 290px 1fr;
-    transition: grid-template-columns 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    grid-template-columns: 290px minmax(0, 1fr);
+    overflow: hidden; /* Keeps child columns self-contained */
     position: relative;
+    transition: grid-template-columns 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ==========================================================================
-   Sidebar
+   Sidebar — Fixed & Scrollable When Needed
    ========================================================================== */
 .side {
     display: flex;
     flex-direction: column;
-    gap: 22px;
-    padding: 24px 18px;
+    gap: 20px;
+    padding: 24px 18px 20px;
     background: #12161d;
     color: #edf2ee;
     border-right: 1px solid #1f272e;
-    min-height: 100vh;
+    height: 100%;
+    height: 100svh;
+    max-height: 100svh;
     box-sizing: border-box;
-    transition: width 0.24s ease, padding 0.24s ease, opacity 0.2s ease;
-    overflow-y: auto;
+    overflow-y: auto; /* Entire sidebar scrolls if window height is very small */
     overflow-x: hidden;
     z-index: 10;
+    transition: width 0.24s ease, padding 0.24s ease, opacity 0.2s ease;
 }
 
 .side::-webkit-scrollbar {
@@ -129,7 +139,7 @@ a {
 /* Sidebar Toggle Button */
 .sidebar-toggle {
     position: fixed;
-    top: 24px;
+    top: 22px;
     left: 272px;
     z-index: 25;
     display: grid;
@@ -187,6 +197,7 @@ a {
     align-items: center;
     gap: 11px;
     padding: 0 6px;
+    flex-shrink: 0;
 }
 
 .logo {
@@ -246,6 +257,7 @@ a {
     background: rgba(255, 255, 255, 0.03);
     font-weight: 600;
     font-size: 0.88rem;
+    flex-shrink: 0;
     transition: var(--transition);
 }
 
@@ -273,12 +285,21 @@ a {
     background: rgba(255, 255, 255, 0.06);
 }
 
-/* Sidebar Section Headers */
+/* Recent Chats Section — Scrollable Chat History */
+.history-section {
+    flex: 1 1 0; /* Expands to fill available sidebar space */
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevents overflow outside section */
+}
+
 .section-label-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin: 0 6px 8px;
+    flex-shrink: 0;
 }
 
 .label {
@@ -306,22 +327,15 @@ a {
     background: rgba(237, 128, 104, 0.12);
 }
 
-/* History List */
-.history-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 140px;
-}
-
+/* Inner scrollable history container */
 .history {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding-right: 3px;
-    max-height: 240px;
+    padding-right: 4px;
 }
 
 .history::-webkit-scrollbar {
@@ -344,6 +358,7 @@ a {
     background: transparent;
     text-align: left;
     font-size: 0.82rem;
+    flex-shrink: 0;
     transition: var(--transition);
     position: relative;
 }
@@ -393,6 +408,7 @@ a {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex-shrink: 0;
 }
 
 .prompt {
@@ -454,6 +470,7 @@ a {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .foot-note {
@@ -489,28 +506,30 @@ a {
 }
 
 /* ==========================================================================
-   Main Chat Section
+   Main Chat Workspace — Pinned Header & Composer, Scrollable Messages
    ========================================================================== */
 .main {
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+    height: 100svh;
+    max-height: 100svh;
     min-width: 0;
-    min-height: 100vh;
+    overflow: hidden; /* Crucial: Main DOES NOT scroll */
     background: var(--paper);
     position: relative;
     transition: background 0.25s ease;
 }
 
-/* Header Top */
+/* Header Top — Pinned */
 .top {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 24px clamp(24px, 5.5vw, 80px);
+    padding: 20px clamp(24px, 5.5vw, 80px);
     border-bottom: 1px solid var(--line);
     background: var(--paper);
-    position: sticky;
-    top: 0;
     z-index: 5;
     transition: border-color 0.25s ease, background 0.25s ease;
 }
@@ -601,11 +620,14 @@ a {
 }
 
 /* ==========================================================================
-   Messages Area
+   Messages Area — THIS IS THE ONLY PART THAT ROLLS IN CHAT
    ========================================================================== */
 .messages {
+    flex: 1 1 0;
+    min-height: 0; /* Crucial so overflow works properly in grid */
     overflow-y: auto;
-    padding: 32px clamp(20px, 8vw, 130px) 24px;
+    overflow-x: hidden;
+    padding: 28px clamp(20px, 8vw, 130px) 24px;
     display: flex;
     flex-direction: column;
     scroll-behavior: smooth;
@@ -622,7 +644,7 @@ a {
 /* Welcome View */
 .welcome {
     width: min(760px, 100%);
-    margin: 5vh auto auto;
+    margin: 4vh auto auto;
     padding: 0 4px;
 }
 
@@ -861,18 +883,20 @@ body.dim-preview .bubble code {
 }
 
 /* ==========================================================================
-   Composer
+   Composer — Pinned at bottom of viewport
    ========================================================================== */
 .composer {
+    flex-shrink: 0;
     width: min(820px, calc(100% - 40px));
-    margin: auto auto 24px;
-    padding-bottom: 6px;
+    margin: 0 auto;
+    padding: 8px 0 20px;
+    background: transparent;
 }
 
 .hint {
     display: flex;
     justify-content: space-between;
-    padding: 0 6px 9px;
+    padding: 0 6px 8px;
     color: var(--muted);
     font-size: 0.68rem;
     font-weight: 500;
@@ -888,7 +912,7 @@ body.dim-preview .bubble code {
 .input {
     display: flex;
     align-items: flex-end;
-    min-height: 59px;
+    min-height: 58px;
     padding: 10px 14px;
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -952,7 +976,7 @@ textarea::placeholder {
     align-items: center;
     justify-content: center;
     gap: 9px;
-    min-height: 59px;
+    min-height: 58px;
     padding: 0 20px;
     border: 0;
     border-radius: 17px;
@@ -1310,7 +1334,7 @@ body.dim-preview .about-content a {
     }
 
     .sidebar-toggle {
-        top: 18px;
+        top: 16px;
         left: 14px;
         width: 32px;
         height: 32px;
@@ -1328,7 +1352,7 @@ body.dim-preview .about-content a {
     }
 
     .top {
-        padding: 18px 18px 18px 56px;
+        padding: 16px 16px 16px 54px;
     }
 
     .stream {
@@ -1336,15 +1360,15 @@ body.dim-preview .about-content a {
     }
 
     .messages {
-        padding: 20px 16px 16px;
+        padding: 18px 16px 16px;
     }
 
     .welcome {
-        margin-top: 3vh;
+        margin-top: 2vh;
     }
 
     .welcome h2 {
-        font-size: 2.5rem;
+        font-size: 2.2rem;
     }
 
     .hover-toolbar {
@@ -1360,7 +1384,7 @@ body.dim-preview .about-content a {
 
     .composer {
         width: calc(100% - 20px);
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
 
     .hint {
