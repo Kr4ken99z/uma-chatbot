@@ -1569,7 +1569,7 @@ body.dim-preview .auth-alert.success {
 }
 
 /* ==========================================================================
-   Responsive Adaptations
+   Responsive Adaptations — Mobile First-Class Drawer & Clean Layout
    ========================================================================== */
 @media (max-width: 900px) {
     .cards {
@@ -1580,55 +1580,99 @@ body.dim-preview .auth-alert.success {
     }
 }
 
-@media (max-width: 700px) {
+/* Backdrop for Mobile Sidebar Drawer */
+.sidebar-backdrop {
+    display: none;
+}
+
+@media (max-width: 768px) {
     .shell {
-        grid-template-columns: 0 1fr;
+        grid-template-columns: 1fr !important;
+        position: relative;
     }
 
-    .shell:not(.sidebar-collapsed) .side {
+    /* Off-canvas Drawer */
+    .side {
         position: fixed;
         top: 0;
         left: 0;
         bottom: 0;
-        width: 290px;
-        z-index: 30;
-        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
+        width: min(310px, 84vw) !important;
+        height: 100% !important;
+        height: 100svh !important;
+        z-index: 120;
+        transform: translateX(0);
+        transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+        box-shadow: 14px 0 45px rgba(0, 0, 0, 0.65);
     }
 
     .shell.sidebar-collapsed .side {
-        width: 0;
-        opacity: 0;
+        transform: translateX(-100%);
         pointer-events: none;
+        box-shadow: none;
     }
 
+    /* Dark Tap-to-Close Backdrop */
+    .sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(14, 18, 24, 0.65);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 115;
+        transition: opacity 0.2s ease;
+    }
+
+    .shell.sidebar-collapsed .sidebar-backdrop {
+        display: none;
+    }
+
+    .shell:not(.sidebar-collapsed) .sidebar-backdrop {
+        display: block;
+    }
+
+    /* Sidebar Toggle Button */
     .sidebar-toggle {
-        top: 16px;
+        top: 14px;
         left: 14px;
-        width: 32px;
-        height: 32px;
-        border-color: var(--line);
+        width: 38px;
+        height: 38px;
+        border: 1px solid var(--line);
         background: var(--paper-card);
         color: var(--ink);
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+        z-index: 130;
     }
 
     .shell:not(.sidebar-collapsed) .sidebar-toggle {
-        left: 246px;
-        background: #1d252b;
+        left: calc(min(310px, 84vw) - 46px);
+        background: #232c32;
         color: #b9c7bf;
-        border-color: #354049;
+        border-color: #3b4850;
     }
 
+    /* Hide floating toolbar on mobile to prevent cluttering chat */
+    .hover-toolbar {
+        display: none !important;
+    }
+
+    /* Top Header */
     .top {
-        padding: 16px 16px 16px 54px;
+        padding: 14px 16px 14px 62px;
+    }
+
+    .top h1 {
+        font-size: 1.25rem;
     }
 
     .stream {
         display: none;
     }
 
+    /* Messages */
     .messages {
-        padding: 18px 16px 16px;
+        padding: 16px 14px 12px;
     }
 
     .welcome {
@@ -1636,22 +1680,28 @@ body.dim-preview .auth-alert.success {
     }
 
     .welcome h2 {
-        font-size: 2.2rem;
+        font-size: 2.1rem;
     }
 
-    .hover-toolbar {
-        right: 10px;
-        top: auto;
-        bottom: 84px;
-        transform: none;
+    .user-message,
+    .uma-message {
+        width: 100%;
+        gap: 10px;
+        margin-bottom: 18px;
     }
 
-    .tool::after {
-        right: 44px;
+    .user-message .bubble {
+        max-width: 85%;
+        padding: 10px 14px;
     }
 
+    .bubble {
+        font-size: 0.9rem;
+    }
+
+    /* Composer */
     .composer {
-        width: calc(100% - 20px);
+        width: calc(100% - 16px);
         margin-bottom: 8px;
     }
 
@@ -1677,8 +1727,10 @@ body.dim-preview .auth-alert.success {
         display: none;
     }
 
-    .about-modal {
+    .about-modal,
+    .auth-modal {
         width: calc(100vw - 20px);
-        max-height: calc(100svh - 20px);
+        max-height: calc(100svh - 24px);
+        border-radius: 16px;
     }
 }

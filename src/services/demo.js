@@ -1,8 +1,12 @@
 function createDemoReply(message) {
     const cleanedMessage = message.toLowerCase();
 
-    if (cleanedMessage.includes('who made') || cleanedMessage.includes('who created') || cleanedMessage.includes('creator') || cleanedMessage.includes('koustav')) {
-        return 'I was created and developed by Koustav Mondal, a Full-Stack Software Developer specializing in Java, Spring Boot, and the MERN stack. He is currently pursuing his B.Tech in Electronics and Communication Engineering at Academy of Technology.';
+    if (cleanedMessage.includes('who made') || cleanedMessage.includes('who created')) {
+        return 'I was created and developed by Koustav Mondal, a Full-Stack Software Developer.';
+    }
+
+    if (cleanedMessage.includes('who is koustav') || cleanedMessage.includes('do you know koustav') || cleanedMessage.includes('koustav')) {
+        return 'Yes, Koustav Mondal is my creator and developer! He is a Full-Stack Software Developer specializing in the MERN Stack, Java, and Spring Boot.';
     }
 
     if (cleanedMessage.includes('java')) {

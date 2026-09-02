@@ -7,6 +7,7 @@
 // DOM References — Main Interface
 const shell = document.getElementById('shell');
 const sidebarToggle = document.getElementById('sidebarToggle');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
 const newChat = document.getElementById('newChat');
 const clearChat = document.getElementById('clearChat');
 const historyList = document.getElementById('historyList');
@@ -130,6 +131,7 @@ clearInputBtn.addEventListener('click', () => {
 
 newChat.addEventListener('click', () => {
     startNewConversation();
+    closeSidebarOnMobile();
 });
 
 clearChat.addEventListener('click', () => {
@@ -140,6 +142,9 @@ clearChat.addEventListener('click', () => {
 });
 
 sidebarToggle.addEventListener('click', toggleSidebar);
+if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebarOnMobile);
+}
 
 // Toolbar buttons
 toolNew.addEventListener('click', () => {
@@ -473,9 +478,9 @@ async function streamUmaResponse(userPrompt) {
     const ensureBotMessage = () => {
         if (!botMessage) {
             removeTypingIndicator(typingId);
-            botMessage = addMessage('bot', '');
-            const lastMessage = messagesFlow.lastElementChild;
-            botTextElement = lastMessage ? lastMessage.querySelector('.bubble') : null;
+            const added = addMessage('bot', '');
+            botMessage = added.message;
+            botTextElement = added.bubble;
         }
         return { botMessage, botTextElement };
     };
@@ -716,12 +721,11 @@ function addMessage(role, text) {
     saveConversations();
     renderHistory();
 
-    if (text) {
-        messagesFlow.appendChild(createMessageRow(role, text));
-        scrollToBottom();
-    }
+    const row = createMessageRow(role, text);
+    messagesFlow.appendChild(row);
+    scrollToBottom();
 
-    return message;
+    return { message, row, bubble: row.querySelector('.bubble') };
 }
 
 // -----------------------------------------------------------------------------
@@ -842,11 +846,13 @@ function renderHistory() {
         btn.append(titleSpan, arrow);
 
         btn.addEventListener('click', () => {
-            if (activeChatId === conv.id) return;
-            activeChatId = conv.id;
-            saveConversations();
-            renderHistory();
-            renderMessages();
+            if (activeChatId !== conv.id) {
+                activeChatId = conv.id;
+                saveConversations();
+                renderHistory();
+                renderMessages();
+            }
+            closeSidebarOnMobile();
             focusInput();
         });
 
@@ -891,6 +897,7 @@ function renderPrompts() {
             messageInput.value = item.prompt;
             autoResizeInput();
             updateClearInputButtonVisibility();
+            closeSidebarOnMobile();
             messageInput.focus();
         });
 
@@ -903,12 +910,23 @@ function renderPrompts() {
 // -----------------------------------------------------------------------------
 
 function initSidebarState() {
-    const isCollapsed = localStorage.getItem(SIDEBAR_KEY) === 'true';
+    const isMobile = window.innerWidth <= 768;
+    const saved = localStorage.getItem(SIDEBAR_KEY);
+    const isCollapsed = saved !== null ? saved === 'true' : isMobile;
     if (isCollapsed) {
         shell.classList.add('sidebar-collapsed');
         updateSidebarToggleBtn(true);
     } else {
+        shell.classList.remove('sidebar-collapsed');
         updateSidebarToggleBtn(false);
+    }
+}
+
+function closeSidebarOnMobile() {
+    if (window.innerWidth <= 768) {
+        shell.classList.add('sidebar-collapsed');
+        updateSidebarToggleBtn(true);
+        localStorage.setItem(SIDEBAR_KEY, 'true');
     }
 }
 
