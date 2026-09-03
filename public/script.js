@@ -52,6 +52,7 @@ const authBackdrop = document.getElementById('authBackdrop');
 const closeAuth = document.getElementById('closeAuth');
 const tabSignIn = document.getElementById('tabSignIn');
 const tabSignUp = document.getElementById('tabSignUp');
+const tabAdmin = document.getElementById('tabAdmin');
 const authErrorAlert = document.getElementById('authErrorAlert');
 const authSuccessAlert = document.getElementById('authSuccessAlert');
 const authForm = document.getElementById('authForm');
@@ -295,6 +296,7 @@ if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 
 if (tabSignIn) tabSignIn.addEventListener('click', () => switchAuthTab('signin'));
 if (tabSignUp) tabSignUp.addEventListener('click', () => switchAuthTab('signup'));
+if (tabAdmin) tabAdmin.addEventListener('click', openAdminModal);
 if (switchAuthMode) switchAuthMode.addEventListener('click', () => {
     switchAuthTab(authMode === 'signin' ? 'signup' : 'signin');
 });
