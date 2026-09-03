@@ -1150,9 +1150,9 @@ function formatMarkdown(text) {
         const encodedPrompt = encodeURIComponent(item.alt);
         const imgCardHtml = `
             <div class="chat-image-card">
-                <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="chat-image-link" title="Click to view full image">
+                <div class="chat-image-link" data-url="${item.url}" data-alt="${safeAlt}" role="button" tabindex="0" title="Click to view full image">
                     <img src="${item.url}" alt="${safeAlt}" class="chat-image" loading="lazy" />
-                </a>
+                </div>
                 <div class="chat-image-footer">
                     <span class="chat-image-caption" title="${safeAlt}">✦ ${safeAlt}</span>
                     <div class="chat-image-actions">
@@ -1363,13 +1363,12 @@ function createMessageRow(role, text, messageIndex) {
 
         const actions = document.createElement('div');
         actions.className = 'user-msg-actions';
-        actions.innerHTML = `
             <button class="edit-msg-btn" type="button" title="Edit prompt" aria-label="Edit prompt">
-                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
-                <span>Edit</span>
+                <span class="edit-label">Edit</span>
             </button>
         `;
 
@@ -1386,14 +1385,14 @@ function createMessageRow(role, text, messageIndex) {
         const actions = document.createElement('div');
         actions.className = 'msg-action-bar';
         actions.innerHTML = `
-            <button class="msg-action-btn msg-copy-btn" type="button" title="Copy response">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button class="msg-action-btn msg-copy-btn" type="button" title="Copy response" aria-label="Copy response">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
-                <span class="copy-label">Copy response</span>
+                <span class="copy-label">Copy</span>
             </button>
-            <button class="msg-action-btn msg-feedback-btn" type="button" title="Helpful response">
+            <button class="msg-action-btn msg-feedback-btn" type="button" title="Helpful response" aria-label="Helpful response">
                 <span>👍</span>
             </button>
         `;
@@ -1433,8 +1432,60 @@ async function downloadImage(url, filename = 'uma-generated-image.jpg') {
     }
 }
 
+// Image Lightbox Functions
+const umaImageLightbox = document.getElementById('umaImageLightbox');
+const lightboxBackdrop = document.getElementById('lightboxBackdrop');
+const closeLightboxBtn = document.getElementById('closeLightboxBtn');
+const lightboxImg = document.getElementById('lightboxImg');
+const lightboxTitle = document.getElementById('lightboxTitle');
+const lightboxSaveBtn = document.getElementById('lightboxSaveBtn');
+
+let currentLightboxUrl = '';
+let currentLightboxAlt = '';
+
+function openImageLightbox(url, alt) {
+    if (!umaImageLightbox || !lightboxImg) return;
+    currentLightboxUrl = url;
+    currentLightboxAlt = alt || 'Uma AI Artwork';
+    lightboxImg.src = url;
+    lightboxImg.alt = currentLightboxAlt;
+    if (lightboxTitle) lightboxTitle.textContent = '✦ ' + currentLightboxAlt;
+    umaImageLightbox.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageLightbox() {
+    if (!umaImageLightbox) return;
+    umaImageLightbox.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', closeImageLightbox);
+if (lightboxBackdrop) lightboxBackdrop.addEventListener('click', closeImageLightbox);
+if (lightboxSaveBtn) {
+    lightboxSaveBtn.addEventListener('click', () => {
+        if (currentLightboxUrl) {
+            downloadImage(currentLightboxUrl, `uma-${Date.now()}.jpg`);
+        }
+    });
+}
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && umaImageLightbox && umaImageLightbox.style.display === 'flex') {
+        closeImageLightbox();
+    }
+});
+
 // Global click handler for code copy, math copy, message actions, and editing
 messagesFlow.addEventListener('click', (e) => {
+    // 0. Click image to open in-app lightbox
+    const imgLink = e.target.closest('.chat-image-link');
+    if (imgLink) {
+        const url = imgLink.getAttribute('data-url');
+        const alt = imgLink.getAttribute('data-alt') || 'Uma AI Artwork';
+        if (url) openImageLightbox(url, alt);
+        return;
+    }
+
     // 1. Copy Code button
     const copyBtn = e.target.closest('.copy-code-btn');
     if (copyBtn) {
