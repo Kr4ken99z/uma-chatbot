@@ -1301,29 +1301,29 @@ body.dark-theme .inline-code {
 }
 
 /* ==========================================================================
-   Generated Chat Image Card
+   Generated Chat Image Card (Minimal, Clean UI)
    ========================================================================== */
 .chat-image-card {
     margin: 14px 0;
-    max-width: 520px;
+    max-width: 480px;
     width: 100%;
-    border-radius: 16px;
+    border-radius: 14px;
     overflow: hidden;
     background: var(--paper-card);
     border: 1px solid var(--line);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .chat-image-card:hover {
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
 }
 
 .chat-image-link {
     display: block;
     position: relative;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.04);
     aspect-ratio: 1 / 1;
 }
 
@@ -1343,45 +1343,205 @@ body.dark-theme .inline-code {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 10px 14px;
+    gap: 8px;
+    padding: 8px 12px;
     background: var(--paper-subtle);
     border-top: 1px solid var(--line);
 }
 
 .chat-image-caption {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 55%;
 }
 
-.chat-image-dl-btn {
-    display: inline-flex;
+.chat-image-actions {
+    display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 8px;
-    background: var(--mint-soft);
-    color: #12161d;
-    font-size: 0.74rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: var(--transition);
+    gap: 6px;
     flex-shrink: 0;
 }
 
-body.dark-theme .chat-image-dl-btn {
-    background: rgba(92, 225, 166, 0.15);
-    color: var(--mint);
-    border: 1px solid rgba(92, 225, 166, 0.3);
+.image-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--paper-card);
+    color: var(--ink);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
 }
 
-.chat-image-dl-btn:hover {
-    background: var(--mint);
-    color: #12161d;
+.image-action-btn:hover {
+    border-color: var(--mint2);
+    color: var(--mint2);
+    background: var(--mint-soft);
+}
+
+.image-action-btn.active {
+    background: var(--mint-soft);
+    color: #24815a;
+    border-color: var(--mint2);
+}
+
+body.dark-theme .image-action-btn.active {
+    color: var(--mint2);
+}
+
+/* ==========================================================================
+   Mathematics Solution Card (GitHub/Code card style)
+   ========================================================================== */
+.math-card {
+    margin: 14px 0;
+    border-radius: 12px;
+    background: #0d1117;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+}
+
+.math-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #8b949e;
+}
+
+.math-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #5ce1a6;
+}
+
+.copy-math-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #c9d1d9;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.copy-math-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #8b949e;
+    color: #fff;
+}
+
+.copy-math-btn.copied {
+    background: rgba(92, 225, 166, 0.2);
+    border-color: #5ce1a6;
+    color: #5ce1a6;
+}
+
+.math-body {
+    padding: 16px 14px;
+    overflow-x: auto;
+    text-align: center;
+    font-size: 1.1rem;
+    line-height: 1.6;
+}
+
+.katex-display {
+    margin: 0 !important;
+}
+
+.md-hr {
+    border: 0;
+    height: 1px;
+    background: var(--line);
+    margin: 16px 0;
+}
+
+.math-fallback {
+    display: block;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+}
+
+/* ==========================================================================
+   Smart Copy Response Button & Message Action Bar
+   ========================================================================== */
+.uma-bubble-container {
+    display: flex;
+    flex-direction: column;
+    max-width: 82%;
+}
+
+@media (max-width: 768px) {
+    .uma-bubble-container {
+        max-width: 88%;
+    }
+}
+
+.msg-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    padding-left: 2px;
+}
+
+.msg-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-card);
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.msg-action-btn:hover {
+    color: var(--ink);
+    border-color: var(--mint2);
+    background: var(--mint-soft);
+}
+
+.msg-action-btn.copied {
+    color: #24815a;
+    border-color: var(--mint2);
+    background: var(--mint-soft);
+}
+
+body.dark-theme .msg-action-btn.copied {
+    color: var(--mint2);
+}
+
+.msg-action-btn.liked {
+    color: var(--mint2);
+    border-color: var(--mint2);
 }
 
 /* Typing Indicator */
@@ -1561,6 +1721,53 @@ textarea::placeholder {
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+}
+
+.send.stop-mode {
+    background: #e05252 !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 20px rgba(224, 82, 82, 0.35) !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+}
+
+.send.stop-mode:hover {
+    background: #c93b3b !important;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(224, 82, 82, 0.45) !important;
+}
+
+.send.stop-mode b {
+    display: none;
+}
+
+/* Top Header Actions (Stream + Theme button) */
+.top-right-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-theme-btn {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--paper-card);
+    color: var(--ink);
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    transition: var(--transition);
+}
+
+.header-theme-btn:hover {
+    border-color: var(--mint2);
+    color: var(--mint2);
+    background: var(--mint-soft);
+    transform: rotate(15deg);
 }
 
 /* ==========================================================================
@@ -2012,6 +2219,73 @@ body.dim-preview .auth-alert.success {
     cursor: pointer;
 }
 
+/* ==========================================================================
+   Guest Limit Modal (Symmetrical Uniform Padding)
+   ========================================================================== */
+.guest-limit-modal {
+    padding: 28px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+    max-width: 440px;
+    width: min(440px, calc(100vw - 36px));
+}
+
+.guest-limit-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.guest-limit-modal .modal-header h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+}
+
+.guest-limit-modal .close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper-subtle);
+    color: var(--muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: var(--transition);
+}
+
+.guest-limit-modal .close-btn:hover {
+    color: var(--coral);
+    border-color: var(--coral);
+}
+
+.guest-limit-modal .auth-subtitle {
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--muted);
+}
+
+.guest-limit-modal .guest-limit-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 !important;
+    margin-top: 6px;
+}
+
+.guest-limit-modal .auth-submit-btn {
+    margin-top: 0;
+}
+
 /* Accessibility & Utils */
 .sr-only {
     width: 1px;
@@ -2110,16 +2384,13 @@ body.dim-preview .auth-alert.success {
         border-color: #3b4850;
     }
 
-    /* Hide floating toolbar on mobile to prevent cluttering chat */
-    .hover-toolbar {
-        display: none !important;
-    }
-
     /* Top Header — Clean & Compact on Mobile */
     .top {
-        padding: 10px 14px 10px 54px;
-        min-height: 46px;
+        padding: 8px 12px 8px 50px;
+        min-height: 48px;
+        display: flex;
         align-items: center;
+        justify-content: space-between;
         border-bottom: 1px solid var(--line);
     }
 
@@ -2420,7 +2691,21 @@ body.dim-preview .auth-alert.success {
     }
 
     .hint {
-        display: none;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 0 4px 6px !important;
+    }
+
+    #composerHintText,
+    .hint span:last-child {
+        display: none !important;
+    }
+
+    .guest-pill {
+        display: inline-flex !important;
+        padding: 4px 10px;
+        font-size: 0.72rem;
     }
 
     .form {
@@ -2453,5 +2738,10 @@ body.dim-preview .auth-alert.success {
         width: calc(100vw - 20px);
         max-height: calc(100svh - 24px);
         border-radius: 16px;
+    }
+
+    .guest-limit-modal {
+        padding: 22px !important;
+        width: calc(100vw - 28px) !important;
     }
 }

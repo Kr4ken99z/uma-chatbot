@@ -176,9 +176,18 @@ messageInput.addEventListener('input', () => {
 messageInput.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
+        if (isGenerating) {
+            showToast('Uma is responding. Click Stop or wait a moment.');
+            return;
+        }
         chatForm.requestSubmit();
     }
 });
+
+const headerThemeBtn = document.getElementById('headerThemeBtn');
+if (headerThemeBtn) {
+    headerThemeBtn.addEventListener('click', toggleTheme);
+}
 
 clearInputBtn.addEventListener('click', () => {
     messageInput.value = '';
@@ -655,10 +664,24 @@ function handleLogout(shouldNotify = true) {
 // Core Actions & Submission
 // -----------------------------------------------------------------------------
 
+let activeAbortController = null;
+
+function stopGeneration() {
+    if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+    }
+    setLoading(false);
+    showToast('Response stopped');
+}
+
 async function handleFormSubmit(event) {
     event.preventDefault();
 
-    if (isGenerating) return;
+    if (isGenerating) {
+        stopGeneration();
+        return;
+    }
 
     const text = messageInput.value.trim();
     if (!text) return;
@@ -710,6 +733,7 @@ async function streamUmaResponse(userPrompt) {
     }
 
     setLoading(true);
+    activeAbortController = new AbortController();
     const typingId = addTypingIndicator();
     let botMessage = null;
     let botTextElement = null;
@@ -739,6 +763,7 @@ async function streamUmaResponse(userPrompt) {
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
             headers,
+            signal: activeAbortController.signal,
             body: JSON.stringify({ message: userPrompt, history }),
         });
 
@@ -794,6 +819,10 @@ async function streamUmaResponse(userPrompt) {
 
     } catch (error) {
         removeTypingIndicator(typingId);
+        if (error.name === 'AbortError') {
+            console.log('Stream stopped by user');
+            return;
+        }
         updateStatus(false, 'Offline / Error');
 
         const errorMsg = `${error.message} Check server configuration or API keys.`;
@@ -803,6 +832,7 @@ async function streamUmaResponse(userPrompt) {
             addMessage('bot', errorMsg);
         }
     } finally {
+        activeAbortController = null;
         setLoading(false);
         renderHistory();
         if (authToken) {
@@ -923,12 +953,31 @@ function highlightSyntax(code) {
     return html;
 }
 
+function renderMath(mathText, displayMode = false) {
+    if (!mathText) return '';
+    if (typeof window !== 'undefined' && window.katex && typeof window.katex.renderToString === 'function') {
+        try {
+            return window.katex.renderToString(mathText.trim(), {
+                displayMode,
+                throwOnError: false,
+                output: 'htmlAndMathml',
+            });
+        } catch (err) {
+            console.warn('KaTeX render error:', err);
+        }
+    }
+    // Fallback if KaTeX is loading
+    return `<code class="math-fallback">${escapeHtml(mathText)}</code>`;
+}
+
 function formatMarkdown(text) {
     if (!text) return '';
 
     const codeBlocks = [];
+    const mathBlocks = [];
+    const inlineMath = [];
 
-    // 1. Extract fenced code blocks (supporting open blocks during streaming too)
+    // 1. Extract fenced code blocks
     let processed = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
         const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
         codeBlocks.push({
@@ -938,54 +987,137 @@ function formatMarkdown(text) {
         return placeholder;
     });
 
-    // 2. Escape regular text
-    processed = escapeHtml(processed);
-
-    // 2.5 Markdown Images: ![alt](url)
-    processed = processed.replace(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, (match, alt, url) => {
-        return `</p><div class="chat-image-card">
-            <a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-image-link" title="Click to view full image">
-                <img src="${url}" alt="${alt || 'Generated image'}" class="chat-image" loading="lazy" />
-            </a>
-            <div class="chat-image-footer">
-                <span class="chat-image-caption">✦ ${alt || 'Generated image'}</span>
-                <a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-image-dl-btn">
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                    <span>View HD</span>
-                </a>
-            </div>
-        </div><p>`;
+    // 2. Extract block math ($$...$$ or \[...\])
+    processed = processed.replace(/(?:\$\$|\\\[)([\s\S]*?)(?:\$\$|\\\])/g, (match, formula) => {
+        const placeholder = `__MATH_BLOCK_${mathBlocks.length}__`;
+        mathBlocks.push(formula.trim());
+        return placeholder;
     });
 
-    // 3. Bold: **text**
+    // 3. Extract inline math ($...$ or \(...\))
+    processed = processed.replace(/(?:\$|\\\()([^\$\n]+?)(?:\$|\\\))/g, (match, formula) => {
+        if (/^\d+(?:\.\d+)?$/.test(formula.trim())) {
+            return match;
+        }
+        const placeholder = `__INLINE_MATH_${inlineMath.length}__`;
+        inlineMath.push(formula.trim());
+        return placeholder;
+    });
+
+    // 3.5 Extract images: ![alt](url)
+    const imageBlocks = [];
+    processed = processed.replace(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, (match, alt, url) => {
+        const placeholder = `__IMG_BLOCK_${imageBlocks.length}__`;
+        imageBlocks.push({ alt: alt || 'Generated image', url });
+        return placeholder;
+    });
+
+    // 4. Escape regular text
+    processed = escapeHtml(processed);
+
+    // 6. Bold & Italic & Code
     processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-    // 4. Italic: *text* or _text_
     processed = processed.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-
-    // 5. Inline code: `code`
     processed = processed.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
 
-    // 6. Headers
+    // 7. Horizontal rules (--- or ***)
+    processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gim, '<hr class="md-hr">');
+
+    // 8. Headers
+    processed = processed.replace(/^##### (.*$)/gim, '<h6 class="md-h6">$1</h6>');
+    processed = processed.replace(/^#### (.*$)/gim, '<h5 class="md-h5">$1</h5>');
     processed = processed.replace(/^### (.*$)/gim, '<h4 class="md-h4">$1</h4>');
     processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h3">$1</h3>');
     processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h2">$1</h2>');
 
-    // 7. Bullet lists
+    // 9. Bullet lists
     processed = processed.replace(/^\s*[-*]\s+(.*$)/gim, '<li class="md-li">$1</li>');
     processed = processed.replace(/((?:<li class="md-li">.*?<\/li>\s*)+)/gis, '<ul class="md-ul">$1</ul>');
 
-    // 8. Line breaks: \n\n into <p>, single \n into <br>
+    // 10. Line breaks
     processed = processed.replace(/\n\n+/g, '</p><p>');
     processed = processed.replace(/\n/g, '<br>');
     processed = `<p>${processed}</p>`;
     processed = processed.replace(/<p>\s*<\/p>/g, '');
 
-    // 9. Reinsert GitHub-style code cards
+    // 11. Reinsert inline math
+    inlineMath.forEach((item, index) => {
+        const placeholder = `__INLINE_MATH_${index}__`;
+        const rendered = renderMath(item, false);
+        processed = processed.replace(new RegExp(placeholder, 'g'), rendered);
+    });
+
+    // 11.5 Reinsert image cards
+    imageBlocks.forEach((item, index) => {
+        const placeholder = `__IMG_BLOCK_${index}__`;
+        const safeAlt = escapeHtml(item.alt);
+        const encodedPrompt = encodeURIComponent(item.alt);
+        const imgCardHtml = `
+            <div class="chat-image-card">
+                <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="chat-image-link" title="Click to view full image">
+                    <img src="${item.url}" alt="${safeAlt}" class="chat-image" loading="lazy" />
+                </a>
+                <div class="chat-image-footer">
+                    <span class="chat-image-caption" title="${safeAlt}">✦ ${safeAlt}</span>
+                    <div class="chat-image-actions">
+                        <button class="image-action-btn image-feedback-btn" type="button" title="Helpful response">
+                            <span>👍</span>
+                        </button>
+                        <button class="image-action-btn image-download-btn" type="button" data-url="${item.url}" data-filename="uma-${Date.now()}.jpg" title="Download image">
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <span>Save</span>
+                        </button>
+                        <button class="image-action-btn image-redo-btn" type="button" data-prompt="${encodedPrompt}" title="Regenerate artwork">
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            <span>Redo</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        processed = processed.replace(new RegExp(`<p>\\s*${placeholder}\\s*<\\/p>`, 'g'), imgCardHtml);
+        processed = processed.replace(new RegExp(placeholder, 'g'), imgCardHtml);
+    });
+
+    // 12. Reinsert block math in separate Solution/Math section (Requirement 3)
+    mathBlocks.forEach((item, index) => {
+        const placeholder = `__MATH_BLOCK_${index}__`;
+        const rendered = renderMath(item, true);
+        const encodedRawMath = encodeURIComponent(item);
+        const mathCardHtml = `
+            <div class="math-card">
+                <div class="math-header">
+                    <span class="math-title">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16v3l-10 7 10 7v3H4"></path>
+                        </svg>
+                        <span>Math / Solution</span>
+                    </span>
+                    <button class="copy-math-btn" type="button" data-raw-math="${encodedRawMath}" aria-label="Copy LaTeX">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="copy-label">Copy LaTeX</span>
+                    </button>
+                </div>
+                <div class="math-body">
+                    ${rendered}
+                </div>
+            </div>
+        `;
+        processed = processed.replace(new RegExp(`<p>\\s*${placeholder}\\s*<\\/p>`, 'g'), mathCardHtml);
+        processed = processed.replace(new RegExp(placeholder, 'g'), mathCardHtml);
+    });
+
+    // 13. Reinsert code blocks
     codeBlocks.forEach((item, index) => {
         const placeholder = `__CODE_BLOCK_${index}__`;
         const langDisplay = item.lang ? (item.lang.charAt(0).toUpperCase() + item.lang.slice(1)) : 'Code';
@@ -1064,15 +1196,20 @@ function removeTypingIndicator(id) {
 
 function setLoading(isLoading) {
     isGenerating = isLoading;
-    sendBtn.disabled = isLoading;
-    messageInput.disabled = isLoading;
+    // Allow typing in messageInput even while generating!
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
 
     if (isLoading) {
         streamStatus.classList.add('active');
-        sendBtn.querySelector('span').textContent = 'Thinking...';
+        sendBtn.classList.add('stop-mode');
+        sendBtn.innerHTML = '<span>Stop</span> <b>■</b>';
+        sendBtn.setAttribute('title', 'Stop generating response');
     } else {
         streamStatus.classList.remove('active');
-        sendBtn.querySelector('span').textContent = 'Send';
+        sendBtn.classList.remove('stop-mode');
+        sendBtn.innerHTML = '<span>Send</span> <b>↗</b>';
+        sendBtn.setAttribute('title', 'Send message');
         focusInput();
     }
 }
@@ -1135,16 +1272,55 @@ function createMessageRow(role, text, messageIndex) {
         container.append(bubble, actions);
         row.append(avatar, container);
     } else {
+        const container = document.createElement('div');
+        container.className = 'uma-bubble-container';
+
         const bubble = document.createElement('div');
         bubble.className = 'bubble';
         bubble.innerHTML = formatMarkdown(text);
-        row.append(avatar, bubble);
+
+        const actions = document.createElement('div');
+        actions.className = 'msg-action-bar';
+        actions.innerHTML = `
+            <button class="msg-action-btn msg-copy-btn" type="button" title="Copy response">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-label">Copy response</span>
+            </button>
+            <button class="msg-action-btn msg-feedback-btn" type="button" title="Helpful response">
+                <span>👍</span>
+            </button>
+        `;
+
+        container.append(bubble, actions);
+        row.append(avatar, container);
     }
 
     return row;
 }
 
-// Global click handler for code copy and message editing
+// Download Image Helper
+async function downloadImage(url, filename = 'uma-generated-image.jpg') {
+    showToast('Downloading image...');
+    try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+        window.open(url, '_blank');
+    }
+}
+
+// Global click handler for code copy, math copy, message actions, and editing
 messagesFlow.addEventListener('click', (e) => {
     // 1. Copy Code button
     const copyBtn = e.target.closest('.copy-code-btn');
@@ -1163,6 +1339,91 @@ messagesFlow.addEventListener('click', (e) => {
         }).catch(() => {
             showToast('Code copied');
         });
+        return;
+    }
+
+    // 1.5 Copy Math / Solution button
+    const copyMathBtn = e.target.closest('.copy-math-btn');
+    if (copyMathBtn) {
+        const rawMath = decodeURIComponent(copyMathBtn.getAttribute('data-raw-math') || '');
+        if (!rawMath) return;
+
+        navigator.clipboard.writeText(rawMath).then(() => {
+            copyMathBtn.classList.add('copied');
+            const label = copyMathBtn.querySelector('.copy-label');
+            if (label) label.textContent = 'Copied! ✓';
+            setTimeout(() => {
+                copyMathBtn.classList.remove('copied');
+                if (label) label.textContent = 'Copy LaTeX';
+            }, 2000);
+        }).catch(() => {
+            showToast('LaTeX copied');
+        });
+        return;
+    }
+
+    // 1.6 Copy Response button
+    const copyMsgBtn = e.target.closest('.msg-copy-btn');
+    if (copyMsgBtn) {
+        const row = copyMsgBtn.closest('.uma-message');
+        const bubble = row?.querySelector('.bubble');
+        if (!bubble) return;
+
+        const msgIdx = parseInt(row.dataset.messageIndex ?? '-1', 10);
+        const conv = getActiveConversation();
+        let textToCopy = bubble.innerText;
+        if (conv && msgIdx >= 0 && conv.messages[msgIdx]) {
+            textToCopy = conv.messages[msgIdx].text || textToCopy;
+        }
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            copyMsgBtn.classList.add('copied');
+            const label = copyMsgBtn.querySelector('.copy-label');
+            if (label) label.textContent = 'Copied! ✓';
+            setTimeout(() => {
+                copyMsgBtn.classList.remove('copied');
+                if (label) label.textContent = 'Copy response';
+            }, 2000);
+        }).catch(() => {
+            showToast('Response copied');
+        });
+        return;
+    }
+
+    // 1.7 Message Feedback button
+    const feedbackBtn = e.target.closest('.msg-feedback-btn');
+    if (feedbackBtn) {
+        feedbackBtn.classList.toggle('liked');
+        showToast(feedbackBtn.classList.contains('liked') ? 'Thanks for the feedback! ✦' : 'Feedback updated');
+        return;
+    }
+
+    // 1.8 Image Actions: Feedback, Download, Redo
+    const imgFeedbackBtn = e.target.closest('.image-feedback-btn');
+    if (imgFeedbackBtn) {
+        imgFeedbackBtn.classList.toggle('active');
+        showToast(imgFeedbackBtn.classList.contains('active') ? 'Thanks for the feedback! ✦' : 'Feedback updated');
+        return;
+    }
+
+    const imgDlBtn = e.target.closest('.image-download-btn');
+    if (imgDlBtn) {
+        const url = imgDlBtn.getAttribute('data-url');
+        const filename = imgDlBtn.getAttribute('data-filename') || 'uma-generated-image.jpg';
+        if (url) downloadImage(url, filename);
+        return;
+    }
+
+    const imgRedoBtn = e.target.closest('.image-redo-btn');
+    if (imgRedoBtn) {
+        if (isGenerating) {
+            showToast('Please wait for Uma to finish responding.');
+            return;
+        }
+        const prompt = decodeURIComponent(imgRedoBtn.getAttribute('data-prompt') || '');
+        if (prompt) {
+            handlePromptSubmit(`generate an image of ${prompt}`);
+        }
         return;
     }
 

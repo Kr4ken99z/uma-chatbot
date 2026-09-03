@@ -7,7 +7,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260903_v8_img">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="style.css?v=20260903_v9_math">
 </head>
 <body>
     <main class="shell" id="shell">
@@ -105,7 +107,7 @@
         <!-- Main Workspace -->
         <section class="main" aria-label="Conversation space">
             <header class="top">
-                <div>
+                <div class="top-title-area">
                     <div class="eyebrow">
                         <span class="online" id="statusDot"></span>
                         <span id="connectionStatus">Online</span>
@@ -113,15 +115,20 @@
                     <h1>Uma <span class="coral-spark">✦</span></h1>
                     <p id="headerSubtitle">A calmer place to think out loud.</p>
                 </div>
-                <div class="stream" id="streamStatus">
-                    <span class="stream-dot" aria-hidden="true"></span>
-                    <span class="stream-text">Streaming responses</span>
-                    <div class="stream-wave" aria-hidden="true">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
+                <div class="top-right-actions">
+                    <div class="stream" id="streamStatus">
+                        <span class="stream-dot" aria-hidden="true"></span>
+                        <span class="stream-text">Streaming responses</span>
+                        <div class="stream-wave" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
                     </div>
+                    <button class="header-theme-btn" id="headerThemeBtn" type="button" aria-label="Toggle theme" title="Toggle theme">
+                        <span class="theme-icon">◐</span>
+                    </button>
                 </div>
             </header>
 
@@ -291,15 +298,15 @@
 
     <!-- Guest Limit Modal -->
     <div class="modal-backdrop" id="guestLimitBackdrop" hidden></div>
-    <section class="auth-modal" id="guestLimitModal" aria-labelledby="guestLimitTitle" aria-modal="true" role="dialog" hidden>
+    <section class="auth-modal guest-limit-modal" id="guestLimitModal" aria-labelledby="guestLimitTitle" aria-modal="true" role="dialog" hidden>
         <div class="modal-header">
             <h3 id="guestLimitTitle">Free Guest Limit Reached ✦</h3>
             <button class="close-btn" id="closeGuestLimitBtn" type="button" aria-label="Close dialog">✕</button>
         </div>
-        <p class="auth-subtitle" style="margin-bottom: 20px; font-size: 0.9rem; line-height: 1.55;">
+        <p class="auth-subtitle">
             You have used your <strong>3 free guest messages</strong>! Sign in or create a free account to continue unlimited chats, retain full memory, and save your conversations.
         </p>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="guest-limit-actions">
             <button class="auth-submit-btn" id="guestModalSignUpBtn" type="button">
                 <span>Create Free Account</span> <b>↗</b>
             </button>
@@ -309,6 +316,6 @@
         </div>
     </section>
 
-    <script src="script.js?v=20260903_v8_img"></script>
+    <script src="script.js?v=20260903_v9_math"></script>
 </body>
 </html>
