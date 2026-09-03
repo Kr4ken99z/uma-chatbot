@@ -1363,6 +1363,7 @@ function createMessageRow(role, text, messageIndex) {
 
         const actions = document.createElement('div');
         actions.className = 'user-msg-actions';
+        actions.innerHTML = `
             <button class="edit-msg-btn" type="button" title="Edit prompt" aria-label="Edit prompt">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
