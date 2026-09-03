@@ -3,6 +3,7 @@ const geminiApi = require('./geminiApi');
 const groqApi = require('./groqApi');
 const { createDemoReply, streamDemoReply } = require('./demo');
 const { getLiveContextIfApplicable } = require('./realtimeService');
+const { isImageGenerationRequest, generateImageReply, streamImageReply } = require('./imageService');
 
 const providers = {
     gemini: geminiApi,
@@ -49,6 +50,10 @@ function getProviderOrder() {
 }
 
 async function sendMessage(userMessage, history = []) {
+    if (isImageGenerationRequest(userMessage)) {
+        return generateImageReply(userMessage);
+    }
+
     const liveContext = await getLiveContextIfApplicable(userMessage);
     const enrichedMessage = liveContext ? `${liveContext}\n\nUser Question: ${userMessage}` : userMessage;
 
@@ -81,6 +86,10 @@ async function sendMessage(userMessage, history = []) {
 }
 
 async function streamMessage(userMessage, history = [], onChunk) {
+    if (isImageGenerationRequest(userMessage)) {
+        return await streamImageReply(userMessage, onChunk);
+    }
+
     const liveContext = await getLiveContextIfApplicable(userMessage);
     const enrichedMessage = liveContext ? `${liveContext}\n\nUser Question: ${userMessage}` : userMessage;
 
