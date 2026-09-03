@@ -294,6 +294,10 @@
         <p class="auth-switch-text" id="authSwitchText">
             Don't have an account? <button type="button" id="switchAuthMode">Create one</button>
         </p>
+
+        <div style="text-align: center; padding: 0 28px 20px;">
+            <button type="button" id="openAdminLoginBtn" style="background:none; border:none; color:var(--muted); font-size:0.75rem; font-weight:600; cursor:pointer; padding:4px 8px; border-radius:6px; transition:all 0.15s ease;">⚡ Admin Portal</button>
+        </div>
     </section>
 
     <!-- Guest Limit Modal -->
@@ -316,6 +320,83 @@
         </div>
     </section>
 
-    <script src="script.js?v=20260903_v9_math"></script>
+    <!-- Admin Dashboard Modal -->
+    <div class="modal-backdrop" id="adminBackdrop" hidden></div>
+    <section class="auth-modal admin-modal" id="adminModal" aria-labelledby="adminTitle" aria-modal="true" role="dialog" hidden>
+        <div class="modal-header admin-modal-header">
+            <div>
+                <span class="admin-badge">⚡ COMMAND CENTER</span>
+                <h3 id="adminTitle">Uma Admin & Diagnostics</h3>
+            </div>
+            <button class="close-btn" id="closeAdminBtn" type="button" aria-label="Close dialog">✕</button>
+        </div>
+
+        <!-- Admin Login Form (if not authenticated) -->
+        <div id="adminLoginSection" style="padding: 0 24px 24px;">
+            <p class="auth-subtitle" style="margin-bottom: 14px; font-size: 0.88rem; line-height: 1.55;">
+                Enter administrator passcode to inspect registered users, token usage, and real-time chatbot telemetry.
+            </p>
+            <div class="auth-alert error" id="adminErrorAlert" style="display:none; margin: 0 0 14px;"></div>
+            <form id="adminLoginForm" style="display:flex; flex-direction:column; gap:12px;">
+                <div class="form-group">
+                    <label for="adminPasscode">Admin Passcode</label>
+                    <input type="password" id="adminPasscode" placeholder="Default: uma-admin-2026" required autocomplete="current-password" />
+                </div>
+                <button class="auth-submit-btn" id="adminSubmitBtn" type="submit">
+                    <span>Unlock Dashboard</span> <b>↗</b>
+                </button>
+            </form>
+        </div>
+
+        <!-- Admin Dashboard Stats (when authenticated) -->
+        <div id="adminDashboardSection" style="display:none; padding: 0 24px 24px;">
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <span class="stat-label">Registered Users</span>
+                    <strong class="stat-value" id="adminTotalUsers">0</strong>
+                    <small class="stat-sub">Accounts created</small>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="stat-label">Conversations</span>
+                    <strong class="stat-value" id="adminTotalConversations">0</strong>
+                    <small class="stat-sub">Chats in Neon DB</small>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="stat-label">Daily Token Quota</span>
+                    <strong class="stat-value" id="adminTokenQuota" style="color:var(--mint);">1M</strong>
+                    <small class="stat-sub">1,000,000 / Day</small>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="stat-label">System Health</span>
+                    <strong class="stat-value" id="adminServerHealth" style="color:var(--mint);">100%</strong>
+                    <small class="stat-sub" id="adminLatency">~220ms Latency</small>
+                </div>
+            </div>
+
+            <div class="admin-details-box">
+                <h4>Chatbot Condition & Telemetry</h4>
+                <div class="admin-telemetry-list">
+                    <div class="telemetry-row"><span>Active AI Model:</span><strong id="adminActiveModel">Gemini 2.0 Flash</strong></div>
+                    <div class="telemetry-row"><span>Fallback Provider:</span><strong id="adminFallbackModel">GROQ (gpt-oss-20b)</strong></div>
+                    <div class="telemetry-row"><span>Database:</span><strong id="adminDbStatus">Neon PostgreSQL</strong></div>
+                    <div class="telemetry-row"><span>Memory (RSS):</span><strong id="adminMemory">28 MB</strong></div>
+                    <div class="telemetry-row"><span>Server Uptime:</span><strong id="adminUptime">0s</strong></div>
+                    <div class="telemetry-row"><span>Runtime:</span><strong id="adminNodeVer">Node.js</strong></div>
+                </div>
+            </div>
+
+            <div class="admin-recent-users-box">
+                <h4>Recent Registered Users</h4>
+                <div id="adminRecentUsersList" class="admin-users-list"></div>
+            </div>
+
+            <div class="admin-modal-footer">
+                <button type="button" class="admin-refresh-btn" id="adminRefreshBtn">↻ Refresh</button>
+                <button type="button" class="admin-logout-btn" id="adminLogoutBtn">Logout Admin</button>
+            </div>
+        </div>
+    </section>
+
+    <script src="script.js?v=20260903_v10_admin"></script>
 </body>
 </html>

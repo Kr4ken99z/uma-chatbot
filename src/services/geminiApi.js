@@ -3,11 +3,9 @@ const { UMA_SYSTEM_PROMPT } = require('./prompt');
 
 const hasRealApiKey = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here';
 const FALLBACK_MODELS = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
     'gemini-2.0-flash',
-    'gemini-flash-latest',
-    'gemini-flash-lite-latest',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
 ];
 
 async function sendMessage(userMessage, history = []) {
@@ -40,7 +38,7 @@ async function streamMessage(userMessage, history = [], onChunk) {
 }
 
 function getModelCandidates() {
-    return [...new Set(['gemini-3.6-flash', GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean))];
+    return [...new Set([GEMINI_MODEL, 'gemini-2.0-flash', 'gemini-1.5-flash', ...FALLBACK_MODELS].filter(Boolean))];
 }
 
 async function fetchGeminiWithFallback(action, userMessage, history = [], query = '') {

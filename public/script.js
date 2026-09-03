@@ -734,19 +734,15 @@ async function streamUmaResponse(userPrompt) {
 
     setLoading(true);
     activeAbortController = new AbortController();
-    const typingId = addTypingIndicator();
-    let botMessage = null;
-    let botTextElement = null;
 
-    const ensureBotMessage = () => {
-        if (!botMessage) {
-            removeTypingIndicator(typingId);
-            const added = addMessage('bot', '');
-            botMessage = added.message;
-            botTextElement = added.bubble;
-        }
-        return { botMessage, botTextElement };
-    };
+    // Instantly spawn bot message with live streaming cursor
+    const added = addMessage('bot', '');
+    let botMessage = added.message;
+    let botTextElement = added.bubble;
+    botTextElement.innerHTML = '<span class="live-stream-cursor">▍</span>';
+    scrollToBottom();
+
+    const ensureBotMessage = () => ({ botMessage, botTextElement });
 
     try {
         const headers = { 'Content-Type': 'application/json' };
@@ -770,7 +766,7 @@ async function streamUmaResponse(userPrompt) {
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             if (response.status === 403 && data.guestLimitReached) {
-                removeTypingIndicator(typingId);
+                botTextElement.closest('.uma-message')?.remove();
                 showGuestLimitModal();
                 throw new Error(data.error || 'Guest limit reached (3 chats).');
             }
@@ -813,21 +809,24 @@ async function streamUmaResponse(userPrompt) {
         }
 
         if (!receivedChunk) {
-            const { botMessage: msg, botTextElement: txtEl } = ensureBotMessage();
-            updateStreamingMessage(msg, txtEl, 'I received your message, but Uma returned an empty response.');
+            updateStreamingMessage(botMessage, botTextElement, 'I received your message, but Uma returned an empty response.', true);
+        } else {
+            updateStreamingMessage(botMessage, botTextElement, botMessage.text, true);
         }
 
     } catch (error) {
-        removeTypingIndicator(typingId);
         if (error.name === 'AbortError') {
             console.log('Stream stopped by user');
+            if (botTextElement) {
+                updateStreamingMessage(botMessage, botTextElement, botMessage.text || '', true);
+            }
             return;
         }
         updateStatus(false, 'Offline / Error');
 
         const errorMsg = `${error.message} Check server configuration or API keys.`;
         if (botMessage) {
-            updateStreamingMessage(botMessage, botTextElement, errorMsg);
+            updateStreamingMessage(botMessage, botTextElement, errorMsg, true);
         } else {
             addMessage('bot', errorMsg);
         }
@@ -850,7 +849,9 @@ function handleStreamEvent(eventText, ensureBotMessage) {
     }
 
     if (parsed.eventName === 'done') {
-        if (parsed.data.isMock) {
+        const { botMessage, botTextElement } = ensureBotMessage();
+        updateStreamingMessage(botMessage, botTextElement, botMessage.text, true);
+        if (parsed.data?.isMock) {
             if (providerBadge) providerBadge.textContent = 'DEMO';
             connectionStatus.textContent = 'Demo mode';
         }
@@ -862,7 +863,7 @@ function handleStreamEvent(eventText, ensureBotMessage) {
     }
 
     const { botMessage, botTextElement } = ensureBotMessage();
-    updateStreamingMessage(botMessage, botTextElement, botMessage.text + parsed.data.chunk);
+    updateStreamingMessage(botMessage, botTextElement, botMessage.text + parsed.data.chunk, false);
     return true;
 }
 
@@ -1153,7 +1154,7 @@ function formatMarkdown(text) {
     return processed;
 }
 
-function updateStreamingMessage(messageObj, textElement, text) {
+function updateStreamingMessage(messageObj, textElement, text, isDone = false) {
     const conversation = getActiveConversation();
     messageObj.text = text;
 
@@ -1162,7 +1163,10 @@ function updateStreamingMessage(messageObj, textElement, text) {
     }
 
     if (textElement) {
-        textElement.innerHTML = formatMarkdown(text);
+        const formatted = formatMarkdown(text);
+        textElement.innerHTML = isDone 
+            ? formatted 
+            : `${formatted} <span class="live-stream-cursor">▍</span>`;
     }
 
     saveConversations();
@@ -1909,3 +1913,171 @@ function focusInput() {
         messageInput.focus();
     }
 }
+
+// -----------------------------------------------------------------------------
+// Admin Portal & Diagnostics
+// -----------------------------------------------------------------------------
+const openAdminLoginBtn = document.getElementById('openAdminLoginBtn');
+const adminModal = document.getElementById('adminModal');
+const adminBackdrop = document.getElementById('adminBackdrop');
+const closeAdminBtn = document.getElementById('closeAdminBtn');
+const adminLoginForm = document.getElementById('adminLoginForm');
+const adminPasscode = document.getElementById('adminPasscode');
+const adminErrorAlert = document.getElementById('adminErrorAlert');
+const adminLoginSection = document.getElementById('adminLoginSection');
+const adminDashboardSection = document.getElementById('adminDashboardSection');
+const adminRefreshBtn = document.getElementById('adminRefreshBtn');
+const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+
+const adminTotalUsers = document.getElementById('adminTotalUsers');
+const adminTotalConversations = document.getElementById('adminTotalConversations');
+const adminTokenQuota = document.getElementById('adminTokenQuota');
+const adminServerHealth = document.getElementById('adminServerHealth');
+const adminLatency = document.getElementById('adminLatency');
+const adminActiveModel = document.getElementById('adminActiveModel');
+const adminFallbackModel = document.getElementById('adminFallbackModel');
+const adminDbStatus = document.getElementById('adminDbStatus');
+const adminMemory = document.getElementById('adminMemory');
+const adminUptime = document.getElementById('adminUptime');
+const adminNodeVer = document.getElementById('adminNodeVer');
+const adminRecentUsersList = document.getElementById('adminRecentUsersList');
+
+let adminToken = sessionStorage.getItem('uma_admin_token') || null;
+
+function openAdminModal() {
+    closeAuthModal();
+    if (adminModal) adminModal.hidden = false;
+    if (adminBackdrop) adminBackdrop.hidden = false;
+    document.body.classList.add('modal-open');
+
+    if (adminToken) {
+        showAdminDashboard();
+        fetchAdminStats();
+    } else {
+        showAdminLogin();
+    }
+}
+
+function closeAdminModal() {
+    if (adminModal) adminModal.hidden = true;
+    if (adminBackdrop) adminBackdrop.hidden = true;
+    document.body.classList.remove('modal-open');
+}
+
+function showAdminLogin() {
+    if (adminLoginSection) adminLoginSection.style.display = 'block';
+    if (adminDashboardSection) adminDashboardSection.style.display = 'none';
+    if (adminPasscode) {
+        adminPasscode.value = '';
+        setTimeout(() => adminPasscode.focus(), 60);
+    }
+}
+
+function showAdminDashboard() {
+    if (adminLoginSection) adminLoginSection.style.display = 'none';
+    if (adminDashboardSection) adminDashboardSection.style.display = 'block';
+}
+
+async function fetchAdminStats() {
+    if (!adminToken) return;
+    try {
+        const t0 = performance.now();
+        const res = await fetch('/api/admin/stats', {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const elapsed = Math.round(performance.now() - t0);
+
+        if (!res.ok) {
+            handleAdminLogout();
+            return;
+        }
+
+        const data = await res.json();
+        if (data.ok && data.stats) {
+            const { totalUsers, totalConversations, recentUsers, telemetry } = data.stats;
+            if (adminTotalUsers) adminTotalUsers.textContent = totalUsers;
+            if (adminTotalConversations) adminTotalConversations.textContent = totalConversations;
+            if (adminTokenQuota) adminTokenQuota.textContent = '1,000,000';
+            if (adminServerHealth) adminServerHealth.textContent = '100%';
+            if (adminLatency) adminLatency.textContent = `~${elapsed}ms Latency`;
+
+            if (adminActiveModel) adminActiveModel.textContent = telemetry.primaryModel || 'Gemini 2.0 Flash';
+            if (adminFallbackModel) adminFallbackModel.textContent = telemetry.fallbackProvider || 'GROQ';
+            if (adminDbStatus) adminDbStatus.textContent = telemetry.database || 'Neon PostgreSQL';
+            if (adminMemory) adminMemory.textContent = `${telemetry.memoryUsageMb} MB`;
+            if (adminUptime) adminUptime.textContent = `${telemetry.uptimeSeconds}s`;
+            if (adminNodeVer) adminNodeVer.textContent = telemetry.nodeVersion;
+
+            if (adminRecentUsersList) {
+                if (!recentUsers || !recentUsers.length) {
+                    adminRecentUsersList.innerHTML = '<div style="color:var(--muted); font-size:0.75rem;">No registered users yet.</div>';
+                } else {
+                    adminRecentUsersList.innerHTML = recentUsers.map(u => `
+                        <div class="admin-user-item">
+                            <div>
+                                <strong>${escapeHtml(u.name || 'User')}</strong>
+                                <small style="display:block;">${escapeHtml(u.email || '')}</small>
+                            </div>
+                            <small>${new Date(u.created_at).toLocaleDateString()}</small>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to fetch admin telemetry:', err);
+    }
+}
+
+async function handleAdminLogin(e) {
+    e.preventDefault();
+    const passcode = adminPasscode?.value.trim();
+    if (!passcode) return;
+
+    if (adminErrorAlert) adminErrorAlert.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ passcode }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (adminErrorAlert) {
+                adminErrorAlert.textContent = data.error || 'Invalid admin passcode.';
+                adminErrorAlert.style.display = 'block';
+            }
+            return;
+        }
+
+        adminToken = data.token;
+        sessionStorage.setItem('uma_admin_token', adminToken);
+        showToast('Admin access granted ✦');
+        showAdminDashboard();
+        fetchAdminStats();
+    } catch (err) {
+        if (adminErrorAlert) {
+            adminErrorAlert.textContent = 'Connection error. Please try again.';
+            adminErrorAlert.style.display = 'block';
+        }
+    }
+}
+
+function handleAdminLogout() {
+    adminToken = null;
+    sessionStorage.removeItem('uma_admin_token');
+    showAdminLogin();
+    showToast('Admin signed out');
+}
+
+if (openAdminLoginBtn) openAdminLoginBtn.addEventListener('click', openAdminModal);
+if (closeAdminBtn) closeAdminBtn.addEventListener('click', closeAdminModal);
+if (adminBackdrop) adminBackdrop.addEventListener('click', closeAdminModal);
+if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin);
+if (adminRefreshBtn) adminRefreshBtn.addEventListener('click', () => {
+    fetchAdminStats();
+    showToast('Telemetry refreshed ↻');
+});
+if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout);
+

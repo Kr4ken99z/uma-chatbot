@@ -5,6 +5,7 @@ require('dotenv').config();
 const { sendMessage, streamMessage, getActiveProviderName } = require('./services/chatApi');
 const authRouter = require('./routes/auth');
 const conversationsRouter = require('./routes/conversations');
+const adminRouter = require('./routes/admin');
 const { initDB, checkDB, hasDBConfig } = require('./utils/db');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('./services/authService');
@@ -47,9 +48,10 @@ function checkGuestLimit(req) {
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json({ limit: '1mb' }));
 
-// Mount auth and conversation routes
+// Mount auth, conversation, and admin routes
 app.use('/api/auth', authRouter);
 app.use('/api/conversations', conversationsRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/api/health', async (req, res) => {
     const mode = getActiveProviderName();

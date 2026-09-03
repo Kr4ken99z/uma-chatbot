@@ -51,13 +51,21 @@ function extractImagePrompt(text) {
  * @returns {string}
  */
 function buildImageUrl(prompt, options = {}) {
-    const cleanPrompt = (prompt || 'artistic landscape').trim();
-    const encoded = encodeURIComponent(cleanPrompt);
+    const rawPrompt = (prompt || 'serene artistic landscape').trim();
+    
+    // Enrich the prompt for dramatic photorealism and fine detail if not already styled
+    const hasStyle = /(photorealistic|cyberpunk|anime|digital art|oil painting|3d render|watercolor|cinematic)/i.test(rawPrompt);
+    const enrichedPrompt = hasStyle 
+        ? rawPrompt 
+        : `${rawPrompt}, highly detailed, cinematic lighting, 8k resolution, photorealistic, masterpiece, sharp focus`;
+
+    const encoded = encodeURIComponent(enrichedPrompt);
     const width = options.width || 1024;
     const height = options.height || 1024;
     const seed = options.seed || Math.floor(Math.random() * 10000000);
 
-    return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
+    // High-definition Flux synthesis (zero Gemini tokens required)
+    return `https://image.pollinations.ai/prompt/${encoded}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
 }
 
 /**
