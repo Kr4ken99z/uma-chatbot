@@ -140,7 +140,7 @@ async function generateImageReply(prompt) {
 async function streamImageReply(prompt, onChunk) {
     const cleanPrompt = extractImagePrompt(prompt) || prompt.trim();
 
-    onChunk(`Synthesizing image of **${cleanPrompt}** with NVIDIA Build AI... ✦\n\n`);
+    onChunk('[[CREATING_IMAGE]]');
 
     // Primary: NVIDIA Build API
     let imageUrl = await generateWithNvidia(cleanPrompt);
@@ -153,7 +153,7 @@ async function streamImageReply(prompt, onChunk) {
 
     const finalMarkdown = `Here is your generated image of **${cleanPrompt}**:\n\n![${cleanPrompt}](${imageUrl})\n\n*Generated with ${providerName} · Prompt: "${cleanPrompt}"*`;
 
-    onChunk(`\n\n${finalMarkdown}`);
+    onChunk(`__REPLACE_ALL__${finalMarkdown}`);
 
     return { isImage: true, imageUrl, prompt: cleanPrompt };
 }

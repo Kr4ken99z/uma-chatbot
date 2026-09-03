@@ -185,11 +185,6 @@ messageInput.addEventListener('keydown', event => {
     }
 });
 
-const headerThemeBtn = document.getElementById('headerThemeBtn');
-if (headerThemeBtn) {
-    headerThemeBtn.addEventListener('click', toggleTheme);
-}
-
 clearInputBtn.addEventListener('click', () => {
     messageInput.value = '';
     autoResizeInput();
@@ -865,7 +860,12 @@ function handleStreamEvent(eventText, ensureBotMessage) {
     }
 
     const { botMessage, botTextElement } = ensureBotMessage();
-    updateStreamingMessage(botMessage, botTextElement, botMessage.text + parsed.data.chunk, false);
+    if (parsed.data.chunk.startsWith('__REPLACE_ALL__')) {
+        botMessage.text = parsed.data.chunk.replace('__REPLACE_ALL__', '');
+        updateStreamingMessage(botMessage, botTextElement, botMessage.text, false);
+    } else {
+        updateStreamingMessage(botMessage, botTextElement, botMessage.text + parsed.data.chunk, false);
+    }
     return true;
 }
 
@@ -973,6 +973,91 @@ function renderMath(mathText, displayMode = false) {
     return `<code class="math-fallback">${escapeHtml(mathText)}</code>`;
 }
 
+function getCreatingImageHtml() {
+    const circles = `
+    <circle cx="72" cy="44" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="86" cy="44" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="100" cy="44" r="2" fill="#d2d7dc" opacity="0.33" class="matrix-dot" style="--delay:1.31s;" />
+    <circle cx="114" cy="44" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="128" cy="44" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="58" cy="58" r="2" fill="#d2d7dc" opacity="0.30" class="matrix-dot" style="--delay:1.39s;" />
+    <circle cx="72" cy="58" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="86" cy="58" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="100" cy="58" r="2" fill="#d2d7dc" opacity="0.47" class="matrix-dot" style="--delay:0.98s;" />
+    <circle cx="114" cy="58" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="128" cy="58" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="142" cy="58" r="2" fill="#d2d7dc" opacity="0.30" class="matrix-dot" style="--delay:1.39s;" />
+    <circle cx="44" cy="72" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="58" cy="72" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="72" cy="72" r="2" fill="#d2d7dc" opacity="0.50" class="matrix-dot" style="--delay:0.93s;" />
+    <circle cx="86" cy="72" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="100" cy="72" r="2" fill="#d2d7dc" opacity="0.62" class="matrix-dot" style="--delay:0.66s;" />
+    <circle cx="114" cy="72" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="128" cy="72" r="2" fill="#d2d7dc" opacity="0.50" class="matrix-dot" style="--delay:0.93s;" />
+    <circle cx="142" cy="72" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="156" cy="72" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="44" cy="86" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="58" cy="86" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="72" cy="86" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="86" cy="86" r="2" fill="#d2d7dc" opacity="0.70" class="matrix-dot" style="--delay:0.46s;" />
+    <circle cx="100" cy="86" r="2" fill="#d2d7dc" opacity="0.76" class="matrix-dot" style="--delay:0.33s;" />
+    <circle cx="114" cy="86" r="2" fill="#d2d7dc" opacity="0.70" class="matrix-dot" style="--delay:0.46s;" />
+    <circle cx="128" cy="86" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="142" cy="86" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="156" cy="86" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="44" cy="100" r="2" fill="#d2d7dc" opacity="0.33" class="matrix-dot" style="--delay:1.31s;" />
+    <circle cx="58" cy="100" r="2" fill="#d2d7dc" opacity="0.47" class="matrix-dot" style="--delay:0.98s;" />
+    <circle cx="72" cy="100" r="2" fill="#d2d7dc" opacity="0.62" class="matrix-dot" style="--delay:0.66s;" />
+    <circle cx="86" cy="100" r="2" fill="#d2d7dc" opacity="0.76" class="matrix-dot" style="--delay:0.33s;" />
+    <circle cx="100" cy="100" r="2" fill="#d2d7dc" opacity="0.90" class="matrix-dot" style="--delay:0.00s;" />
+    <circle cx="114" cy="100" r="2" fill="#d2d7dc" opacity="0.76" class="matrix-dot" style="--delay:0.33s;" />
+    <circle cx="128" cy="100" r="2" fill="#d2d7dc" opacity="0.62" class="matrix-dot" style="--delay:0.66s;" />
+    <circle cx="142" cy="100" r="2" fill="#d2d7dc" opacity="0.47" class="matrix-dot" style="--delay:0.98s;" />
+    <circle cx="156" cy="100" r="2" fill="#d2d7dc" opacity="0.33" class="matrix-dot" style="--delay:1.31s;" />
+    <circle cx="44" cy="114" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="58" cy="114" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="72" cy="114" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="86" cy="114" r="2" fill="#d2d7dc" opacity="0.70" class="matrix-dot" style="--delay:0.46s;" />
+    <circle cx="100" cy="114" r="2" fill="#d2d7dc" opacity="0.76" class="matrix-dot" style="--delay:0.33s;" />
+    <circle cx="114" cy="114" r="2" fill="#d2d7dc" opacity="0.70" class="matrix-dot" style="--delay:0.46s;" />
+    <circle cx="128" cy="114" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="142" cy="114" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="156" cy="114" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="44" cy="128" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="58" cy="128" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="72" cy="128" r="2" fill="#d2d7dc" opacity="0.50" class="matrix-dot" style="--delay:0.93s;" />
+    <circle cx="86" cy="128" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="100" cy="128" r="2" fill="#d2d7dc" opacity="0.62" class="matrix-dot" style="--delay:0.66s;" />
+    <circle cx="114" cy="128" r="2" fill="#d2d7dc" opacity="0.58" class="matrix-dot" style="--delay:0.73s;" />
+    <circle cx="128" cy="128" r="2" fill="#d2d7dc" opacity="0.50" class="matrix-dot" style="--delay:0.93s;" />
+    <circle cx="142" cy="128" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="156" cy="128" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="58" cy="142" r="2" fill="#d2d7dc" opacity="0.30" class="matrix-dot" style="--delay:1.39s;" />
+    <circle cx="72" cy="142" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="86" cy="142" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="100" cy="142" r="2" fill="#d2d7dc" opacity="0.47" class="matrix-dot" style="--delay:0.98s;" />
+    <circle cx="114" cy="142" r="2" fill="#d2d7dc" opacity="0.45" class="matrix-dot" style="--delay:1.04s;" />
+    <circle cx="128" cy="142" r="2" fill="#d2d7dc" opacity="0.39" class="matrix-dot" style="--delay:1.18s;" />
+    <circle cx="142" cy="142" r="2" fill="#d2d7dc" opacity="0.30" class="matrix-dot" style="--delay:1.39s;" />
+    <circle cx="72" cy="156" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    <circle cx="86" cy="156" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="100" cy="156" r="2" fill="#d2d7dc" opacity="0.33" class="matrix-dot" style="--delay:1.31s;" />
+    <circle cx="114" cy="156" r="2" fill="#d2d7dc" opacity="0.31" class="matrix-dot" style="--delay:1.35s;" />
+    <circle cx="128" cy="156" r="2" fill="#d2d7dc" opacity="0.26" class="matrix-dot" style="--delay:1.47s;" />
+    `;
+
+    return `
+    <div class="image-creating-card">
+        <div class="image-creating-title">Creating image</div>
+        <div class="image-creating-graphic">
+            <svg class="image-creating-dots" viewBox="0 0 200 200" width="170" height="170">
+                ${circles}
+            </svg>
+        </div>
+    </div>
+    `;
+}
+
 function formatMarkdown(text) {
     if (!text) return '';
 
@@ -980,8 +1065,16 @@ function formatMarkdown(text) {
     const mathBlocks = [];
     const inlineMath = [];
 
+    // 0. Extract creating image placeholder
+    let hasCreatingImage = false;
+    let processed = text;
+    if (processed.includes('[[CREATING_IMAGE]]')) {
+        hasCreatingImage = true;
+        processed = processed.replace(/\[\[CREATING_IMAGE\]\]/g, '__CREATING_IMG_PLACEHOLDER__');
+    }
+
     // 1. Extract fenced code blocks
-    let processed = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
+    processed = processed.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
         const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
         codeBlocks.push({
             lang: (lang || 'code').trim().toLowerCase(),
@@ -1152,6 +1245,11 @@ function formatMarkdown(text) {
         processed = processed.replace(new RegExp(`<p>\\s*${placeholder}\\s*<\\/p>`, 'g'), cardHtml);
         processed = processed.replace(new RegExp(placeholder, 'g'), cardHtml);
     });
+
+    if (hasCreatingImage) {
+        processed = processed.replace(/<p>\s*__CREATING_IMG_PLACEHOLDER__\s*<\/p>/g, getCreatingImageHtml());
+        processed = processed.replace(/__CREATING_IMG_PLACEHOLDER__/g, getCreatingImageHtml());
+    }
 
     return processed;
 }

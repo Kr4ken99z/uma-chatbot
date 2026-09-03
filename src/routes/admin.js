@@ -14,7 +14,7 @@ router.post('/login', async (req, res) => {
     const inputKey = String(passcode || '').trim();
 
     if (!inputKey || inputKey !== ADMIN_PASSCODE) {
-        return res.status(401).json({ error: 'Invalid admin passcode. Default is uma-admin-2026' });
+        return res.status(401).json({ error: 'Invalid admin passcode.' });
     }
 
     const token = jwt.sign(
