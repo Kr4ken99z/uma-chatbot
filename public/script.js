@@ -77,7 +77,7 @@ const AUTH_USER_KEY = 'uma-auth-user';
 const TAB_SESSION_KEY = 'uma-tab-session-active';
 const TAB_CHAT_KEY = 'uma-tab-chat-id';
 const GUEST_CHAT_KEY = 'uma_guest_chat_count';
-const GUEST_CHAT_LIMIT = 5;
+const GUEST_CHAT_LIMIT = 3;
 
 // Guest Limit Elements
 const guestCounterBadge = document.getElementById('guestCounterBadge');
@@ -235,6 +235,36 @@ if (toolUser) {
     });
 }
 
+// Floating Action Button (FAB) Speed Dial Handler for Mobile
+const fabToggleBtn = document.getElementById('fabToggleBtn');
+const hoverToolbar = document.getElementById('hoverToolbar');
+
+if (fabToggleBtn && hoverToolbar) {
+    fabToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = hoverToolbar.classList.toggle('open');
+        fabToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    // Close when tapping outside
+    document.addEventListener('click', (e) => {
+        if (!hoverToolbar.contains(e.target) && hoverToolbar.classList.contains('open')) {
+            hoverToolbar.classList.remove('open');
+            fabToggleBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    // Close when clicking any tool item on mobile
+    hoverToolbar.querySelectorAll('.tool').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                hoverToolbar.classList.remove('open');
+                fabToggleBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+}
+
 toolTheme.addEventListener('click', () => {
     toggleTheme();
 });
@@ -297,6 +327,10 @@ document.addEventListener('keydown', event => {
         if (!aboutModal.hidden) closeAboutModal();
         if (authModal && !authModal.hidden) closeAuthModal();
         if (guestLimitModal && !guestLimitModal.hidden) closeGuestLimitModal();
+        if (hoverToolbar && hoverToolbar.classList.contains('open')) {
+            hoverToolbar.classList.remove('open');
+            if (fabToggleBtn) fabToggleBtn.setAttribute('aria-expanded', 'false');
+        }
     }
 
     // Ctrl+K or Cmd+K creates a new chat
@@ -713,7 +747,7 @@ async function streamUmaResponse(userPrompt) {
             if (response.status === 403 && data.guestLimitReached) {
                 removeTypingIndicator(typingId);
                 showGuestLimitModal();
-                throw new Error(data.error || 'Guest limit reached (5 chats).');
+                throw new Error(data.error || 'Guest limit reached (3 chats).');
             }
             throw new Error(data.error || 'Uma could not respond right now.');
         }

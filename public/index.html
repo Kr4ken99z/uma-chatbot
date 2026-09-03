@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260903_v6">
+    <link rel="stylesheet" href="style.css?v=20260903_v7_clean">
 </head>
 <body>
     <main class="shell" id="shell">
@@ -71,14 +71,35 @@
             </div>
         </aside>
 
-        <!-- Quick Floating Toolbar -->
-        <nav class="hover-toolbar" aria-label="Quick toolbar">
-            <button class="tool" id="toolNew" type="button" aria-label="New conversation" data-tool="New chat">＋</button>
-            <button class="tool" id="toolFocus" type="button" aria-label="Focus composer" data-tool="Focus composer">✦</button>
-            <span class="tool-divider"></span>
-            <button class="tool" id="toolUser" type="button" aria-label="Sign in / Account" data-tool="Account">👤</button>
-            <button class="tool" id="toolTheme" type="button" aria-label="Toggle theme" data-tool="Toggle theme">◐</button>
-            <button class="tool" id="toolAbout" type="button" aria-label="About Uma" data-tool="About Uma">?</button>
+        <!-- Quick Floating Toolbar / Expandable Mobile FAB -->
+        <nav class="hover-toolbar" id="hoverToolbar" aria-label="Quick actions toolbar">
+            <button class="fab-toggle-btn" id="fabToggleBtn" type="button" aria-label="Toggle quick actions" aria-expanded="false" title="Quick actions">
+                <span class="fab-icon-default">⚡</span>
+                <span class="fab-icon-close">✕</span>
+            </button>
+            <div class="toolbar-items" id="toolbarItems">
+                <button class="tool" id="toolNew" type="button" aria-label="New conversation" data-tool="New chat">
+                    <span class="tool-icon">＋</span>
+                    <span class="tool-label">New chat</span>
+                </button>
+                <button class="tool" id="toolFocus" type="button" aria-label="Focus composer" data-tool="Focus composer">
+                    <span class="tool-icon">✦</span>
+                    <span class="tool-label">Focus</span>
+                </button>
+                <span class="tool-divider"></span>
+                <button class="tool" id="toolUser" type="button" aria-label="Sign in / Account" data-tool="Account">
+                    <span class="tool-icon">👤</span>
+                    <span class="tool-label">Account</span>
+                </button>
+                <button class="tool" id="toolTheme" type="button" aria-label="Toggle theme" data-tool="Toggle theme">
+                    <span class="tool-icon">◐</span>
+                    <span class="tool-label">Theme</span>
+                </button>
+                <button class="tool" id="toolAbout" type="button" aria-label="About Uma" data-tool="About Uma">
+                    <span class="tool-icon">?</span>
+                    <span class="tool-label">About</span>
+                </button>
+            </div>
         </nav>
 
         <!-- Main Workspace -->
@@ -140,7 +161,7 @@
                 <div class="hint">
                     <span id="composerHintText">Uma can help with code, writing, ideas, and more</span>
                     <button type="button" id="guestCounterBadge" class="guest-pill" style="display:none;" title="Click to sign in for unlimited chats">
-                        <span>⚡ Guest: <strong id="guestChatsLeft">5</strong> chats left</span>
+                        <span>⚡ Guest: <strong id="guestChatsLeft">3</strong> chats left</span>
                     </button>
                     <span>Enter to send · Shift + Enter for new line</span>
                 </div>
@@ -276,7 +297,7 @@
             <button class="close-btn" id="closeGuestLimitBtn" type="button" aria-label="Close dialog">✕</button>
         </div>
         <p class="auth-subtitle" style="margin-bottom: 20px; font-size: 0.9rem; line-height: 1.55;">
-            You have used your <strong>5 free guest messages</strong>! Sign in or create a free account to continue unlimited chats, retain full memory, and save your conversations.
+            You have used your <strong>3 free guest messages</strong>! Sign in or create a free account to continue unlimited chats, retain full memory, and save your conversations.
         </p>
         <div style="display: flex; flex-direction: column; gap: 10px;">
             <button class="auth-submit-btn" id="guestModalSignUpBtn" type="button">
@@ -288,6 +309,6 @@
         </div>
     </section>
 
-    <script src="script.js?v=20260903_v6"></script>
+    <script src="script.js?v=20260903_v7_clean"></script>
 </body>
 </html>

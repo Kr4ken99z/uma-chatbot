@@ -12,9 +12,9 @@ const { JWT_SECRET } = require('./services/authService');
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// In-memory guest chat limiter (5 messages per guest session/IP)
+// In-memory guest chat limiter (3 messages per guest session/IP)
 const guestChatCounts = new Map();
-const GUEST_MESSAGE_LIMIT = 5;
+const GUEST_MESSAGE_LIMIT = 3;
 
 function checkGuestLimit(req) {
     const authHeader = req.headers['authorization'];
@@ -37,7 +37,7 @@ function checkGuestLimit(req) {
             isGuest: true,
             allowed: false,
             remaining: 0,
-            error: 'You have reached the free guest limit (5 chats). Please sign in or create an account to continue unlimited conversations!'
+            error: 'You have reached the free guest limit (3 chats). Please sign in or create an account to continue unlimited conversations!'
         };
     }
 
