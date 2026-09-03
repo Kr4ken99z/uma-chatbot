@@ -1007,9 +1007,9 @@ function formatMarkdown(text) {
         return placeholder;
     });
 
-    // 3.5 Extract images: ![alt](url)
+    // 3.5 Extract images: ![alt](url) (supports https and data URIs)
     const imageBlocks = [];
-    processed = processed.replace(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, (match, alt, url) => {
+    processed = processed.replace(/!\[(.*?)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)/g, (match, alt, url) => {
         const placeholder = `__IMG_BLOCK_${imageBlocks.length}__`;
         imageBlocks.push({ alt: alt || 'Generated image', url });
         return placeholder;
@@ -1311,6 +1311,15 @@ function createMessageRow(role, text, messageIndex) {
 async function downloadImage(url, filename = 'uma-generated-image.jpg') {
     showToast('Downloading image...');
     try {
+        if (url.startsWith('data:')) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return;
+        }
         const res = await fetch(url);
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);

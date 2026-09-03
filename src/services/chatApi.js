@@ -51,7 +51,7 @@ function getProviderOrder() {
 
 async function sendMessage(userMessage, history = []) {
     if (isImageGenerationRequest(userMessage)) {
-        return generateImageReply(userMessage);
+        return await generateImageReply(userMessage);
     }
 
     const liveContext = await getLiveContextIfApplicable(userMessage);
