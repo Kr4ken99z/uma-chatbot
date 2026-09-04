@@ -5,3 +5,4 @@ uma-server*.log
 runtime-*.log
 
 .vercel
+.env*
