@@ -1629,17 +1629,27 @@ messagesFlow.addEventListener('click', (e) => {
         const originalText = bubble.textContent.trim();
         const msgIdx = parseInt(row.dataset.messageIndex ?? '-1', 10);
 
+        // Pre-fill bottom composer for convenience
+        if (messageInput) {
+            messageInput.value = originalText;
+            autoResizeInput();
+            updateClearInputButtonVisibility();
+        }
+
         container.style.display = 'none';
 
         const editCard = document.createElement('div');
         editCard.className = 'user-edit-card';
         editCard.innerHTML = `
-            <textarea class="user-edit-textarea">${escapeHtml(originalText)}</textarea>
+            <textarea class="user-edit-textarea" rows="2" placeholder="Edit your prompt...">${escapeHtml(originalText)}</textarea>
             <div class="user-edit-buttons">
                 <button class="user-edit-cancel" type="button">Cancel</button>
                 <button class="user-edit-save" type="button">Save & Submit</button>
             </div>
         `;
+
+        // Prevent click events inside edit card from bubbling up
+        editCard.addEventListener('click', (ev) => ev.stopPropagation());
 
         row.appendChild(editCard);
         const textarea = editCard.querySelector('.user-edit-textarea');
@@ -1651,9 +1661,13 @@ messagesFlow.addEventListener('click', (e) => {
             container.style.display = '';
         };
 
-        editCard.querySelector('.user-edit-cancel').onclick = cleanup;
+        editCard.querySelector('.user-edit-cancel').onclick = (ev) => {
+            ev.stopPropagation();
+            cleanup();
+        };
 
-        const saveAndSubmit = async () => {
+        const saveAndSubmit = async (ev) => {
+            if (ev) ev.stopPropagation();
             const newText = textarea.value.trim();
             if (!newText) return;
             cleanup();
@@ -1667,15 +1681,20 @@ messagesFlow.addEventListener('click', (e) => {
                 return;
             }
 
+            hideWelcomeView();
+
             // Prune conversation messages from this message index forward
             const conv = getActiveConversation();
             if (conv && msgIdx >= 0 && msgIdx < conv.messages.length) {
                 conv.messages = conv.messages.slice(0, msgIdx);
             }
-
-            // Save and re-render messages up to the edit point
             saveConversations();
-            renderMessages();
+
+            // Remove DOM rows from msgIdx onward so the chat never flashes blank
+            const allRows = Array.from(messagesFlow.querySelectorAll('.user-message, .uma-message'));
+            for (let i = msgIdx; i < allRows.length; i++) {
+                allRows[i]?.remove();
+            }
 
             // Append edited user message and stream a fresh response!
             addMessage('user', newText);
@@ -1687,7 +1706,7 @@ messagesFlow.addEventListener('click', (e) => {
         textarea.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter' && !ev.shiftKey) {
                 ev.preventDefault();
-                saveAndSubmit();
+                saveAndSubmit(ev);
             } else if (ev.key === 'Escape') {
                 cleanup();
             }

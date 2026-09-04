@@ -2847,6 +2847,13 @@ body.dim-preview .auth-alert.success {
         overflow-wrap: break-word;
     }
 
+    .user-edit-card {
+        min-width: 0;
+        width: 100%;
+        max-width: calc(100vw - 72px);
+        box-sizing: border-box;
+    }
+
     .bubble {
         font-size: 0.88rem;
     }
