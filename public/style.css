@@ -1220,6 +1220,14 @@ body.dim-preview .user-message .avatar {
     transform: translateY(-1px);
 }
 
+.guest-pill[hidden],
+.guest-pill.hidden,
+.guest-pill[style*="display: none"],
+body.user-logged-in .guest-pill,
+body.user-logged-in #guestCounterBadge {
+    display: none !important;
+}
+
 .uma-message .bubble {
     white-space: normal;
 }
@@ -2863,18 +2871,26 @@ body.dim-preview .auth-alert.success {
     }
 
     .guest-pill {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 5px !important;
-        padding: 4px 12px !important;
-        border-radius: 999px !important;
-        background: rgba(239, 107, 74, 0.14) !important;
-        border: 1px solid rgba(239, 107, 74, 0.4) !important;
-        color: #ff8b70 !important;
-        font-size: 0.76rem !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: rgba(239, 107, 74, 0.14);
+        border: 1px solid rgba(239, 107, 74, 0.4);
+        color: #ff8b70;
+        font-size: 0.76rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .guest-pill[hidden],
+    .guest-pill.hidden,
+    .guest-pill[style*="display: none"],
+    body.user-logged-in .guest-pill,
+    body.user-logged-in #guestCounterBadge {
+        display: none !important;
     }
 
     .guest-pill-text {

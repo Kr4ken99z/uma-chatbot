@@ -106,15 +106,21 @@ function resetGuestChatCount() {
 }
 
 function updateGuestCounterUI() {
-    if (!guestCounterBadge || !guestChatsLeft) return;
-    if (authToken) {
-        guestCounterBadge.style.display = 'none';
+    if (!guestCounterBadge) return;
+    if (authToken || currentUser) {
+        document.body.classList.add('user-logged-in');
+        guestCounterBadge.classList.add('hidden');
+        guestCounterBadge.hidden = true;
+        guestCounterBadge.style.setProperty('display', 'none', 'important');
         return;
     }
+    document.body.classList.remove('user-logged-in');
+    guestCounterBadge.classList.remove('hidden');
+    guestCounterBadge.hidden = false;
     const count = getGuestChatCount();
     const remaining = Math.max(0, GUEST_CHAT_LIMIT - count);
-    guestChatsLeft.textContent = String(remaining);
-    guestCounterBadge.style.display = 'inline-flex';
+    if (guestChatsLeft) guestChatsLeft.textContent = String(remaining);
+    guestCounterBadge.style.setProperty('display', 'inline-flex', 'important');
 }
 
 function showGuestLimitModal() {
@@ -374,7 +380,13 @@ function loadCurrentUser() {
 }
 
 function updateAuthUI() {
-    if (currentUser) {
+    if (currentUser && authToken) {
+        document.body.classList.add('user-logged-in');
+        if (guestCounterBadge) {
+            guestCounterBadge.classList.add('hidden');
+            guestCounterBadge.hidden = true;
+            guestCounterBadge.style.setProperty('display', 'none', 'important');
+        }
         if (openAuthBtn) openAuthBtn.style.display = 'none';
         if (userProfile) {
             userProfile.style.display = 'flex';
@@ -387,6 +399,7 @@ function updateAuthUI() {
             toolUser.setAttribute('aria-label', `Account: ${currentUser.name}`);
         }
     } else {
+        document.body.classList.remove('user-logged-in');
         if (openAuthBtn) openAuthBtn.style.display = 'flex';
         if (userProfile) userProfile.style.display = 'none';
         if (toolUser) {
@@ -636,6 +649,7 @@ async function syncConversationToDB(conv) {
 function handleLogout(shouldNotify = true) {
     authToken = null;
     currentUser = null;
+    document.body.classList.remove('user-logged-in');
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
     localStorage.removeItem(CONVERSATIONS_KEY);
