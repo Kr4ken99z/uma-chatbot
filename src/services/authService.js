@@ -135,6 +135,7 @@ async function verifyToken(token) {
 }
 
 module.exports = {
+    JWT_SECRET,
     signup,
     login,
     verifyToken,

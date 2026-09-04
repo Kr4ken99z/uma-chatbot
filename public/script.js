@@ -777,9 +777,15 @@ async function streamUmaResponse(userPrompt) {
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             if (response.status === 403 && data.guestLimitReached) {
-                botTextElement.closest('.uma-message')?.remove();
+                botTextElement?.closest('.uma-message')?.remove();
+                const activeConv = getActiveConversation();
+                if (activeConv && activeConv.messages && activeConv.messages[activeConv.messages.length - 1] === botMessage) {
+                    activeConv.messages.pop();
+                    saveConversations();
+                }
                 showGuestLimitModal();
-                throw new Error(data.error || 'Guest limit reached (3 chats).');
+                showToast('Guest chat limit reached (3 chats). Please sign in for unlimited conversations!');
+                return;
             }
             throw new Error(data.error || 'Uma could not respond right now.');
         }
@@ -835,7 +841,12 @@ async function streamUmaResponse(userPrompt) {
         }
         updateStatus(false, 'Offline / Error');
 
-        const errorMsg = `${error.message} Check server configuration or API keys.`;
+        const isCleanError = error.message && (
+            error.message.includes('limit') || 
+            error.message.includes('sign in') || 
+            error.message.includes('account')
+        );
+        const errorMsg = isCleanError ? error.message : `${error.message || 'Uma could not respond.'} Please try again.`;
         if (botMessage) {
             updateStreamingMessage(botMessage, botTextElement, errorMsg, true);
         } else {
