@@ -1061,13 +1061,17 @@ function getCreatingImageHtml() {
 function formatMarkdown(text) {
     if (!text) return '';
 
+    // Strip any trailing prompt caption like "*Generated with NVIDIA Build AI · Prompt: ...*"
+    let processed = text
+        .replace(/(?:\r?\n)*\*Generated with [^*]+\*(?:\r?\n)*/gi, '')
+        .replace(/(?:\r?\n)*Generated with NVIDIA[^\n<]+(?:\r?\n)*/gi, '');
+
     const codeBlocks = [];
     const mathBlocks = [];
     const inlineMath = [];
 
     // 0. Extract creating image placeholder
     let hasCreatingImage = false;
-    let processed = text;
     if (processed.includes('[[CREATING_IMAGE]]')) {
         hasCreatingImage = true;
         processed = processed.replace(/\[\[CREATING_IMAGE\]\]/g, '__CREATING_IMG_PLACEHOLDER__');
@@ -1151,7 +1155,8 @@ function formatMarkdown(text) {
         const imgCardHtml = `
             <div class="chat-image-card">
                 <div class="chat-image-link" data-url="${item.url}" data-alt="${safeAlt}" role="button" tabindex="0" title="Click to view full image">
-                    <img src="${item.url}" alt="${safeAlt}" class="chat-image" loading="lazy" />
+                    <div class="chat-image-shimmer"></div>
+                    <img src="${item.url}" alt="${safeAlt}" class="chat-image" loading="lazy" onload="this.classList.add('loaded'); const s = this.previousElementSibling; if(s &amp;&amp; s.classList.contains('chat-image-shimmer')) s.remove();" onerror="this.onerror=null; this.src='https://image.pollinations.ai/prompt/' + encodeURIComponent('${safeAlt}') + '?model=flux&amp;width=1024&amp;height=1024&amp;nologo=true';" />
                 </div>
                 <div class="chat-image-footer">
                     <span class="chat-image-caption" title="${safeAlt}">✦ ${safeAlt}</span>

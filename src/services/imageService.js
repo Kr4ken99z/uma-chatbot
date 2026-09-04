@@ -50,9 +50,13 @@ async function generateWithNvidia(prompt) {
     if (!NVIDIA_API_KEY) return null;
 
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4200); // 4.2s timeout: fast response with zero hanging
+
         const endpoint = `https://ai.api.nvidia.com/v1/genai/${NVIDIA_IMAGE_MODEL || 'black-forest-labs/flux.1-dev'}`;
         const res = await fetch(endpoint, {
             method: 'POST',
+            signal: controller.signal,
             headers: {
                 'Authorization': `Bearer ${NVIDIA_API_KEY}`,
                 'Accept': 'application/json',
@@ -62,10 +66,13 @@ async function generateWithNvidia(prompt) {
                 prompt,
                 mode: 'base',
                 cfg_scale: 3.5,
-                width: 1024,
-                height: 1024,
+                width: 768,
+                height: 768,
+                steps: 14,
             }),
         });
+
+        clearTimeout(timeoutId);
 
         if (!res.ok) {
             console.warn('NVIDIA image API returned status:', res.status);
@@ -73,12 +80,19 @@ async function generateWithNvidia(prompt) {
         }
 
         const data = await res.json();
-        const base64 = data?.artifacts?.[0]?.base64;
-        if (base64) {
-            return `data:image/jpeg;base64,${base64}`;
+        const art = data?.artifacts?.[0];
+
+        // Guard against content filtering (which returns a solid black image)
+        if (art && art.finishReason === 'CONTENT_FILTERED') {
+            console.warn('NVIDIA image content filtered, falling back to Flux engine');
+            return null;
+        }
+
+        if (art && art.base64 && art.base64.length > 20000) {
+            return `data:image/jpeg;base64,${art.base64}`;
         }
     } catch (err) {
-        console.warn('NVIDIA image generation error:', err.message);
+        console.warn('NVIDIA image generation error or timeout:', err.message);
     }
     return null;
 }
@@ -114,16 +128,14 @@ function buildImageUrl(prompt, options = {}) {
 async function generateImageReply(prompt) {
     const cleanPrompt = extractImagePrompt(prompt) || prompt.trim();
     
-    // Primary: NVIDIA Build API
+    // Primary: Fast NVIDIA Build API, seamless fallback to Flux
     let imageUrl = await generateWithNvidia(cleanPrompt);
-    let providerName = 'NVIDIA Build AI';
 
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
-        providerName = 'Flux AI';
     }
 
-    const reply = `Here is your generated image of **${cleanPrompt}**:\n\n![${cleanPrompt}](${imageUrl})\n\n*Generated with ${providerName} · Prompt: "${cleanPrompt}"*`;
+    const reply = `Here is your generated image of **${cleanPrompt}**:\n\n![${cleanPrompt}](${imageUrl})`;
 
     return {
         reply,
@@ -142,16 +154,14 @@ async function streamImageReply(prompt, onChunk) {
 
     onChunk('[[CREATING_IMAGE]]');
 
-    // Primary: NVIDIA Build API
+    // Primary: Fast NVIDIA Build API, seamless fallback to Flux
     let imageUrl = await generateWithNvidia(cleanPrompt);
-    let providerName = 'NVIDIA Build AI';
 
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
-        providerName = 'Flux AI';
     }
 
-    const finalMarkdown = `Here is your generated image of **${cleanPrompt}**:\n\n![${cleanPrompt}](${imageUrl})\n\n*Generated with ${providerName} · Prompt: "${cleanPrompt}"*`;
+    const finalMarkdown = `Here is your generated image of **${cleanPrompt}**:\n\n![${cleanPrompt}](${imageUrl})`;
 
     onChunk(`__REPLACE_ALL__${finalMarkdown}`);
 
