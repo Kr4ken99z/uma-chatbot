@@ -33,25 +33,23 @@ function getProvider(name) {
 }
 
 function getProviderOrder() {
-    const active = getActiveProviderName();
-
-    if (active === 'demo') {
-        return [];
+    // Groq provides blazing-fast sub-second token streaming with 0 lag
+    if (groqApi.isConfigured()) {
+        const order = ['groq'];
+        if (geminiApi.isConfigured()) order.push('gemini');
+        return order;
     }
 
-    const fallback = active === 'groq' ? 'gemini' : 'groq';
-    const order = [active];
-
-    if (providers[fallback]?.isConfigured?.()) {
-        order.push(fallback);
+    if (geminiApi.isConfigured()) {
+        return ['gemini'];
     }
 
-    return order;
+    return [];
 }
 
 async function sendMessage(userMessage, history = []) {
-    if (isImageGenerationRequest(userMessage)) {
-        return await generateImageReply(userMessage);
+    if (isImageGenerationRequest(userMessage, history)) {
+        return await generateImageReply(userMessage, history);
     }
 
     const liveContext = await getLiveContextIfApplicable(userMessage);
@@ -86,8 +84,8 @@ async function sendMessage(userMessage, history = []) {
 }
 
 async function streamMessage(userMessage, history = [], onChunk) {
-    if (isImageGenerationRequest(userMessage)) {
-        return await streamImageReply(userMessage, onChunk);
+    if (isImageGenerationRequest(userMessage, history)) {
+        return await streamImageReply(userMessage, history, onChunk);
     }
 
     const liveContext = await getLiveContextIfApplicable(userMessage);
