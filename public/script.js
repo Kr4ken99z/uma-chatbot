@@ -605,11 +605,7 @@ async function handleAuthSubmit(event) {
 
 async function verifySession() {
     if (!authToken) {
-        // Guest mode: always a clean, fresh start without previous user chats
-        conversations = [createBlankConversation()];
-        activeChatId = conversations[0].id;
-        renderHistory();
-        renderMessages();
+        // Guest mode: keep saved local conversations intact
         return;
     }
 
@@ -698,9 +694,10 @@ function handleLogout(shouldNotify = true) {
     localStorage.removeItem(ACTIVE_CHAT_KEY);
     sessionStorage.removeItem(TAB_CHAT_KEY);
 
-    // Completely reset to a fresh blank start for the guest
+    // Reset to a fresh blank start for the guest
     conversations = [createBlankConversation()];
     activeChatId = conversations[0].id;
+    saveConversations();
     resetGuestChatCount();
 
     updateAuthUI();
@@ -709,7 +706,7 @@ function handleLogout(shouldNotify = true) {
     focusInput();
 
     if (shouldNotify) {
-        showToast('Signed out. Fresh guest session started.');
+        showToast('Signed out.');
     }
 }
 
@@ -849,9 +846,15 @@ async function streamUmaResponse(userPrompt) {
     } catch (error) {
         if (error.name === 'AbortError') {
             console.log('Stream stopped by user');
+            const stoppedText = botMessage.text && botMessage.text !== '[[CREATING_IMAGE]]'
+                ? botMessage.text
+                : '*(Response stopped)*';
             if (botTextElement) {
-                updateStreamingMessage(botMessage, botTextElement, botMessage.text || '', true);
+                updateStreamingMessage(botMessage, botTextElement, stoppedText, true);
+            } else {
+                botMessage.text = stoppedText;
             }
+            saveConversations();
             return;
         }
         updateStatus(false, 'Offline / Error');
@@ -870,6 +873,7 @@ async function streamUmaResponse(userPrompt) {
     } finally {
         activeAbortController = null;
         setLoading(false);
+        saveConversations();
         renderHistory();
         if (authToken) {
             syncConversationToDB(getActiveConversation());
@@ -1972,11 +1976,6 @@ function addMessage(role, text) {
 // -----------------------------------------------------------------------------
 
 function loadConversations() {
-    // If not logged in, guest gets a fresh start every time!
-    if (!authToken) {
-        return [createBlankConversation()];
-    }
-
     try {
         const saved = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY));
         if (Array.isArray(saved) && saved.length) {
@@ -1984,6 +1983,11 @@ function loadConversations() {
         }
     } catch {
         // Fall through
+    }
+
+    const legacy = loadLegacyConversation();
+    if (legacy) {
+        return [legacy];
     }
 
     return [createBlankConversation()];
@@ -2057,28 +2061,23 @@ function initTabChat() {
 
     sessionStorage.setItem(TAB_SESSION_KEY, 'true');
 
-    if (!authToken) {
-        const guestChat = createBlankConversation();
-        conversations = [guestChat];
-        sessionStorage.setItem(TAB_CHAT_KEY, guestChat.id);
-        return guestChat.id;
+    // Restore active chat from localStorage if it exists
+    const savedActiveChatId = localStorage.getItem(ACTIVE_CHAT_KEY);
+    if (savedActiveChatId && conversations.some(c => c.id === savedActiveChatId)) {
+        sessionStorage.setItem(TAB_CHAT_KEY, savedActiveChatId);
+        return savedActiveChatId;
     }
 
     const topConv = conversations[0];
-    const isTopEmpty = topConv && (!topConv.messages || topConv.messages.length === 0);
-
-    if (isTopEmpty) {
+    if (topConv) {
         sessionStorage.setItem(TAB_CHAT_KEY, topConv.id);
         localStorage.setItem(ACTIVE_CHAT_KEY, topConv.id);
         return topConv.id;
     }
 
     const freshChat = createBlankConversation();
-    conversations.unshift(freshChat);
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
-    localStorage.setItem(ACTIVE_CHAT_KEY, freshChat.id);
-    sessionStorage.setItem(TAB_CHAT_KEY, freshChat.id);
-
+    conversations = [freshChat];
+    saveConversations();
     return freshChat.id;
 }
 
@@ -2092,9 +2091,11 @@ function getActiveConversation() {
 }
 
 function saveConversations() {
-    if (authToken) {
+    try {
         localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
         localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
+    } catch (e) {
+        console.warn('Failed to save conversations to localStorage:', e);
     }
     sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
 }
