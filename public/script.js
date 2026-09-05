@@ -930,6 +930,14 @@ function parseStreamEvent(eventText) {
 // Markdown & GitHub-Style Code Card Formatter
 // -----------------------------------------------------------------------------
 
+function sanitizeControlCharacters(text) {
+    if (!text || typeof text !== 'string') return '';
+    // Strip BOM and non-printable C0 control codes (preserves \t, \n, \r and all valid Unicode symbols/emojis)
+    return text
+        .replace(/\uFEFF/g, '')
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
 function escapeHtml(str) {
     return String(str || '')
         .replace(/&/g, '&amp;')
@@ -945,7 +953,7 @@ function highlightSyntax(code, lang = '') {
     // Comments: // ... or /* ... */ or # ... or -- ...
     const comments = [];
     html = html.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|--[^\n]*)/g, (match) => {
-        const id = `__COMM_${comments.length}__`;
+        const id = `@@COMM_${comments.length}@@`;
         comments.push(`<span class="token-comment">${match}</span>`);
         return id;
     });
@@ -953,34 +961,52 @@ function highlightSyntax(code, lang = '') {
     // Strings: "..." or '...' or `...`
     const strings = [];
     html = html.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, (match) => {
-        const id = `__STR_${strings.length}__`;
+        const id = `@@STR_${strings.length}@@`;
         strings.push(`<span class="token-string">${match}</span>`);
         return id;
     });
 
+    // Method calls / Functions: fnName(...)
+    const functions = [];
+    html = html.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, (match, fnName) => {
+        const id = `@@FN_${functions.length}@@`;
+        functions.push(`<span class="token-fn">${fnName}</span>`);
+        return id;
+    });
+
     // Types & Standard Classes (Java, Python, JS, TS, Go, C++, etc.)
+    const types = [];
     const typesRegex = /\b(String|Integer|Long|Double|Float|Boolean|Byte|Short|Character|Number|Object|Array|List|ArrayList|Map|HashMap|Set|HashSet|Queue|Deque|Stack|Vector|Promise|Observable|Error|Exception|DateTime|Date|Time|UUID|Scanner|System|Math|Console|JSON|RegExp)\b/g;
-    html = html.replace(typesRegex, '<span class="token-type">$1</span>');
+    html = html.replace(typesRegex, (match) => {
+        const id = `@@TYPE_${types.length}@@`;
+        types.push(`<span class="token-type">${match}</span>`);
+        return id;
+    });
 
     // Keywords (Java, Python, JS, TS, C++, Go, Rust, SQL, Bash)
+    const keywords = [];
     const keywordsRegex = /\b(public|private|protected|class|interface|enum|extends|implements|static|final|abstract|void|int|boolean|double|float|char|byte|short|long|return|if|else|elif|for|while|do|switch|case|default|break|continue|new|this|super|try|catch|finally|throw|throws|import|package|def|function|var|let|const|async|await|typeof|instanceof|from|as|null|true|false|undefined|export|yield|lambda|in|is|not|and|or|with|pass|self|fn|mut|pub|impl|trait|match|func|struct|chan|defer|go|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|JOIN|GROUP\s+BY|ORDER\s+BY|HAVING|CREATE|TABLE|ALTER|DROP)\b/g;
-    html = html.replace(keywordsRegex, '<span class="token-keyword">$1</span>');
+    html = html.replace(keywordsRegex, (match) => {
+        const id = `@@KEY_${keywords.length}@@`;
+        keywords.push(`<span class="token-keyword">${match}</span>`);
+        return id;
+    });
 
     // Numbers
-    html = html.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|0x[0-9a-fA-F]+)\b/g, '<span class="token-number">$1</span>');
-
-    // Method calls / Functions: fnName(...)
-    html = html.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, '<span class="token-fn">$1</span>');
-
-    // Restore strings
-    strings.forEach((str, i) => {
-        html = html.replace(`__STR_${i}__`, str);
+    const numbers = [];
+    html = html.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|0x[0-9a-fA-F]+)\b/g, (match) => {
+        const id = `@@NUM_${numbers.length}@@`;
+        numbers.push(`<span class="token-number">${match}</span>`);
+        return id;
     });
 
-    // Restore comments
-    comments.forEach((comm, i) => {
-        html = html.replace(`__COMM_${i}__`, comm);
-    });
+    // Restore tokens cleanly without keyword tag collisions
+    numbers.forEach((val, i) => { html = html.replace(`@@NUM_${i}@@`, val); });
+    keywords.forEach((val, i) => { html = html.replace(`@@KEY_${i}@@`, val); });
+    types.forEach((val, i) => { html = html.replace(`@@TYPE_${i}@@`, val); });
+    functions.forEach((val, i) => { html = html.replace(`@@FN_${i}@@`, val); });
+    strings.forEach((val, i) => { html = html.replace(`@@STR_${i}@@`, val); });
+    comments.forEach((val, i) => { html = html.replace(`@@COMM_${i}@@`, val); });
 
     return html;
 }
@@ -988,18 +1014,34 @@ function highlightSyntax(code, lang = '') {
 function formatInlineMarkdown(text) {
     if (!text) return '';
     let s = escapeHtml(text);
-    // Links: [text](url)
-    s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
-    // Bold: **text**
-    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Italic: *text* (safe guard against bold)
-    s = s.replace(/(?:^|[^\*])\*([^*\n]+?)\*(?:[^\*]|$)/g, (match, p1) => {
-        return match.replace(`*${p1}*`, `<em>${p1}</em>`);
+
+    // 1. Tokenize inline code first to prevent markdown symbol collisions inside code (e.g. * or _)
+    const inlineCodes = [];
+    s = s.replace(/`([^`\n]+?)`/g, (match, code) => {
+        const placeholder = `@@INL_CODE_${inlineCodes.length}@@`;
+        inlineCodes.push(code);
+        return placeholder;
     });
-    // Strikethrough: ~~text~~
+
+    // 2. Links: [text](url)
+    s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
+
+    // 3. Bold: **text** or __text__
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+    // 4. Italic: *text* or _text_
+    s = s.replace(/(?:^|[^\*])\*([^*\n]+?)\*(?:[^\*]|$)/g, (match, p1) => match.replace(`*${p1}*`, `<em>${p1}</em>`));
+    s = s.replace(/\b_([^_\n]+?)_\b/g, '<em>$1</em>');
+
+    // 5. Strikethrough: ~~text~~
     s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
-    // Inline code: `code`
-    s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
+
+    // 6. Restore inline code badges safely
+    inlineCodes.forEach((code, index) => {
+        s = s.replace(`@@INL_CODE_${index}@@`, `<code class="inline-code">${code}</code>`);
+    });
+
     return s;
 }
 
@@ -1271,8 +1313,11 @@ function getCreatingImageHtml() {
 function formatMarkdown(text) {
     if (!text) return '';
 
+    // Strip BOM and non-printable control characters (UTF-8 clean)
+    let processed = sanitizeControlCharacters(text);
+
     // Strip any trailing prompt caption like "*Generated with NVIDIA Build AI · Prompt: ...*"
-    let processed = text
+    processed = processed
         .replace(/(?:\r?\n)*\*Generated with [^*]+\*(?:\r?\n)*/gi, '')
         .replace(/(?:\r?\n)*Generated with NVIDIA[^\n<]+(?:\r?\n)*/gi, '');
 
@@ -1336,13 +1381,13 @@ function formatMarkdown(text) {
     // 6. Parse ordered & unordered lists (including hierarchical nested lists)
     processed = parseMarkdownLists(processed);
 
-    // 7. Headers with clear visual hierarchy
-    processed = processed.replace(/^###### (.*$)/gim, '<h6 class="md-h6">$1</h6>');
-    processed = processed.replace(/^##### (.*$)/gim, '<h6 class="md-h5">$1</h6>');
-    processed = processed.replace(/^#### (.*$)/gim, '<h5 class="md-h4">$1</h5>');
-    processed = processed.replace(/^### (.*$)/gim, '<h4 class="md-h3">$1</h4>');
-    processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h2">$1</h3>');
-    processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h1">$1</h2>');
+    // 7. Headers with clear visual hierarchy & formatted inline elements
+    processed = processed.replace(/^###### (.*$)/gim, (m, p1) => `<h6 class="md-h6">${formatInlineMarkdown(p1)}</h6>`);
+    processed = processed.replace(/^##### (.*$)/gim, (m, p1) => `<h6 class="md-h5">${formatInlineMarkdown(p1)}</h6>`);
+    processed = processed.replace(/^#### (.*$)/gim, (m, p1) => `<h5 class="md-h4">${formatInlineMarkdown(p1)}</h5>`);
+    processed = processed.replace(/^### (.*$)/gim, (m, p1) => `<h4 class="md-h3">${formatInlineMarkdown(p1)}</h4>`);
+    processed = processed.replace(/^## (.*$)/gim, (m, p1) => `<h3 class="md-h2">${formatInlineMarkdown(p1)}</h3>`);
+    processed = processed.replace(/^# (.*$)/gim, (m, p1) => `<h2 class="md-h1">${formatInlineMarkdown(p1)}</h2>`);
 
     // 8. Horizontal rules (--- or ***)
     processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gim, '\n\n<hr class="md-hr">\n\n');

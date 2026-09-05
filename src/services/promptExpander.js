@@ -77,9 +77,9 @@ function isImageGenerationRequest(text, history = []) {
         return false;
     }
 
-    // Short standalone visual entity checks (Requirement 5: e.g. "BMW M5", "Mercedes", "dog", "mountain")
+    // Short standalone visual entity checks (e.g. "BMW M5", "red BMW M5 in Tokyo at night", "Mercedes-AMG GT", "dog", "mountain")
     const words = trimmed.split(/\s+/);
-    if (words.length <= 6) {
+    if (words.length <= 12) {
         if (VISUAL_ENTITY_PATTERNS.some(p => p.test(trimmed))) {
             return true;
         }
@@ -151,22 +151,23 @@ function transformToHighQualityPrompt(userSubject) {
     const colorMatch = raw.match(/\b(red|blue|black|white|silver|grey|gray|green|yellow|orange|purple|gold|matte\s+black|crimson|metallic\s+blue)\b/i);
     const color = colorMatch ? colorMatch[0] : null;
 
-    // Extract location / environment if present
+    // Extract location / environment if present (without leading prepositions)
     const locMatch = raw.match(/\b(?:in|at|on)\s+([A-Za-z0-9\s]+?)(?:$|\sat\s|\sin\s)/i);
-    const location = locMatch ? locMatch[0].trim() : null;
+    const location = locMatch ? locMatch[1].trim() : null;
 
     // Extract time / atmosphere
     const timeMatch = raw.match(/\b(at\s+night|sunset|sunrise|golden\s+hour|rainy|snowy|foggy|dusk|dawn)\b/i);
-    const timeAtmosphere = timeMatch ? timeMatch[0] : null;
+    const timeAtmosphere = timeMatch ? timeMatch[0].trim() : null;
 
-    const extraContext = [color ? `with ${color} finish` : null, location, timeAtmosphere].filter(Boolean).join(', ');
+    const extraContext = [color ? `with ${color} finish` : null, location ? `in ${location}` : null, timeAtmosphere].filter(Boolean).join(', ');
     const contextPhrase = extraContext ? ` (${extraContext})` : '';
 
-    // 1. SPECIFIC BMW M5
+    // 1. SPECIFIC BMW M5 (Must NOT become a generic BMW sedan)
     if (/\bbmw\s+m5\b/i.test(raw)) {
         const colorDesc = color ? `${color} finish` : 'glossy metallic finish';
-        const envDesc = location || timeAtmosphere ? `${location || ''} ${timeAtmosphere || ''}`.trim() : 'a luxury modern architectural pavilion';
-        return `Create a photorealistic image of a BMW M5 in ${colorDesc}, set in ${envDesc}. Accurately depict the BMW M5 as a high-performance sports sedan with correct BMW M5 proportions, aggressive M-specific styling, distinctive kidney grille, M badging, performance wheels, realistic body details and lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model.`;
+        const envDesc = location ? `in ${location}` : 'in a luxury modern architectural pavilion';
+        const timeDesc = timeAtmosphere ? ` ${timeAtmosphere}` : '';
+        return `Create a photorealistic image of a BMW M5 in ${colorDesc}, set ${envDesc}${timeDesc}. Accurately depict the BMW M5 as a high-performance sports sedan with correct BMW M5 proportions, aggressive M-specific styling, distinctive kidney grille, M badging, performance wheels, realistic body details and lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model.`;
     }
 
     // 2. OTHER SPECIFIC BMW MODELS (M3, M4, M6, M8, i8, etc.)
@@ -177,12 +178,14 @@ function transformToHighQualityPrompt(userSubject) {
         return `Create a photorealistic image of a ${model} in ${colorDesc}${contextPhrase}. Accurately depict the ${model} with correct manufacturer proportions, authentic aggressive body contours, signature BMW kidney grille, official badging, performance wheels, and realistic automotive lighting. Front three-quarter angle, cinematic automotive photography, 8k resolution, realistic reflections. Do not substitute another model.`;
     }
 
-    // 3. MERCEDES / MERCEDES-AMG
+    // 3. MERCEDES / MERCEDES-AMG (Must NOT become a generic Mercedes)
     if (/\bmercedes\b/i.test(raw)) {
-        const isAmg = /\bamg\b/i.test(raw);
-        const modelName = isAmg ? 'Mercedes-AMG performance vehicle' : 'luxury Mercedes-Benz';
+        const isAmgGt = /\bamg\s*gt\b/i.test(raw);
+        const isAmg = /\bamg\b/i.test(raw) || isAmgGt;
+        const modelName = isAmgGt ? 'Mercedes-AMG GT supercar' : (isAmg ? 'Mercedes-AMG performance vehicle' : 'luxury Mercedes-Benz');
         const colorDesc = color ? ` in ${color}` : '';
-        return `Create a photorealistic image of a ${modelName}${colorDesc}${contextPhrase}. Accurately depict the iconic Mercedes design language, signature front grille with the three-pointed star emblem, sculpted aerodynamic body lines, premium metallic finish, and precision alloy wheels. Front three-quarter dynamic shot, cinematic automotive photography, realistic materials and reflections, dramatic lighting, 8k resolution.`;
+        const amgDetails = isAmgGt ? 'iconic low-slung wide fastback stance, signature Panamericana vertical-slat grille, aggressive active aero spoiler,' : 'signature front grille with the three-pointed star emblem, sculpted aerodynamic body lines,';
+        return `Create a photorealistic image of a ${modelName}${colorDesc}${contextPhrase}. Accurately depict the authentic design language, ${amgDetails} premium metallic finish, and precision AMG performance alloy wheels. Front three-quarter dynamic shot, cinematic automotive photography, realistic materials and reflections, dramatic lighting, 8k resolution. Do not substitute a generic vehicle.`;
     }
 
     // 4. PORSCHE (911, etc.)

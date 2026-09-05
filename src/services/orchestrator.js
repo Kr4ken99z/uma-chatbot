@@ -221,6 +221,57 @@ async function processStreamMessage(userMessage, history = [], onChunk) {
         ? `${contextEnrichments.join('\n\n')}\n\nUser Question: ${activeMessage}`
         : activeMessage;
 
+/**
+ * Creates a stream chunk filter to strip internal reasoning or <think> tags on the fly
+ * @param {function} onChunk
+ * @returns {function}
+ */
+function createStreamingSanitizer(onChunk) {
+    let inThinkTag = false;
+    let thinkBuffer = '';
+
+    return function (chunk) {
+        if (!chunk) return;
+        let text = chunk;
+
+        if (inThinkTag) {
+            thinkBuffer += text;
+            const endIdx = thinkBuffer.indexOf('</think>');
+            if (endIdx !== -1) {
+                inThinkTag = false;
+                const remainder = thinkBuffer.slice(endIdx + 8);
+                thinkBuffer = '';
+                if (remainder) {
+                    onChunk(remainder);
+                }
+            }
+            return;
+        }
+
+        if (text.includes('<think>')) {
+            const startIdx = text.indexOf('<think>');
+            const prefix = text.slice(0, startIdx);
+            if (prefix) {
+                onChunk(prefix);
+            }
+            const afterStart = text.slice(startIdx);
+            const endIdx = afterStart.indexOf('</think>');
+            if (endIdx !== -1) {
+                const remainder = afterStart.slice(endIdx + 8);
+                if (remainder) {
+                    onChunk(remainder);
+                }
+            } else {
+                inThinkTag = true;
+                thinkBuffer = afterStart;
+            }
+            return;
+        }
+
+        onChunk(text);
+    };
+}
+
     // 7. STREAM VIA ACTIVE LLM PROVIDER
     const providerOrder = getProviderOrder();
     if (!providerOrder.length) {
@@ -228,10 +279,12 @@ async function processStreamMessage(userMessage, history = [], onChunk) {
         return { isMock: true };
     }
 
+    const safeChunkHandler = createStreamingSanitizer(onChunk);
+
     let lastError = null;
     for (const providerName of providerOrder) {
         try {
-            return await providers[providerName].streamMessage(finalEnrichedMessage, history, onChunk);
+            return await providers[providerName].streamMessage(finalEnrichedMessage, history, safeChunkHandler);
         } catch (err) {
             lastError = err;
             console.warn(`Provider ${providerName} stream failed:`, err.message);
