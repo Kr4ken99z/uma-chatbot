@@ -94,6 +94,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     try {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
         const result = await sendMessage(message, history);
         return res.json(result);
     } catch (error) {

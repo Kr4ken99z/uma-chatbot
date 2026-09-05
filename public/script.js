@@ -1083,6 +1083,57 @@ function getCreatingImageHtml() {
     `;
 }
 
+function parseMarkdownTables(text) {
+    const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*\r?\n)(?:^[ \t]*\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|[ \t]*\r?\n)(?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm;
+
+    return text.replace(tableRegex, (match) => {
+        const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) return match;
+
+        const headerLine = lines[0];
+        const separatorLine = lines[1];
+        const bodyLines = lines.slice(2);
+
+        const alignments = separatorLine
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map(cell => {
+                const c = cell.trim();
+                const left = c.startsWith(':');
+                const right = c.endsWith(':');
+                if (left && right) return 'center';
+                if (right) return 'right';
+                if (left) return 'left';
+                return 'left';
+            });
+
+        const headers = headerLine
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map((cell, i) => {
+                const align = alignments[i] || 'left';
+                return `<th style="text-align:${align}">${cell.trim()}</th>`;
+            })
+            .join('');
+
+        const rows = bodyLines
+            .map(line => {
+                const cells = line
+                    .replace(/^\||\|$/g, '')
+                    .split('|')
+                    .map((cell, i) => {
+                        const align = alignments[i] || 'left';
+                        return `<td style="text-align:${align}">${cell.trim()}</td>`;
+                    })
+                    .join('');
+                return `<tr>${cells}</tr>`;
+            })
+            .join('');
+
+        return `\n\n<div class="table-wrapper"><table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>\n\n`;
+    });
+}
+
 function formatMarkdown(text) {
     if (!text) return '';
 
@@ -1094,6 +1145,7 @@ function formatMarkdown(text) {
     const codeBlocks = [];
     const mathBlocks = [];
     const inlineMath = [];
+    const tableBlocks = [];
 
     // 0. Extract creating image placeholder
     let hasCreatingImage = false;
@@ -1109,14 +1161,14 @@ function formatMarkdown(text) {
             lang: (lang || 'code').trim().toLowerCase(),
             code: code.replace(/\r?\n$/, ''),
         });
-        return placeholder;
+        return `\n\n${placeholder}\n\n`;
     });
 
     // 2. Extract block math ($$...$$ or \[...\])
     processed = processed.replace(/(?:\$\$|\\\[)([\s\S]*?)(?:\$\$|\\\])/g, (match, formula) => {
         const placeholder = `__MATH_BLOCK_${mathBlocks.length}__`;
         mathBlocks.push(formula.trim());
-        return placeholder;
+        return `\n\n${placeholder}\n\n`;
     });
 
     // 3. Extract inline math ($...$ or \(...\))
@@ -1134,45 +1186,88 @@ function formatMarkdown(text) {
     processed = processed.replace(/!\[(.*?)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)/g, (match, alt, url) => {
         const placeholder = `__IMG_BLOCK_${imageBlocks.length}__`;
         imageBlocks.push({ alt: alt || 'Generated image', url });
-        return placeholder;
+        return `\n\n${placeholder}\n\n`;
     });
 
-    // 4. Escape regular text
+    // 4. Extract tables before escaping
+    processed = processed.replace(/((?:^[ \t]*\|[^\n]+\|[ \t]*\r?\n)(?:^[ \t]*\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|[ \t]*\r?\n)(?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm, (match) => {
+        const placeholder = `__TABLE_BLOCK_${tableBlocks.length}__`;
+        tableBlocks.push(parseMarkdownTables(match).trim());
+        return `\n\n${placeholder}\n\n`;
+    });
+
+    // 5. Escape regular text (preserves all Unicode characters like →, ←, ✓, ✗, •, –, —, ≤, ≥, ≠, ≈, ∞, ×, ÷, √, π, ∑, ∫, {})
     processed = escapeHtml(processed);
 
-    // 6. Bold & Italic & Code
+    // 6. Markdown Links: [text](url)
+    processed = processed.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
+
+    // 7. Bold, Italic, Strikethrough & Inline Code
     processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     processed = processed.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+    processed = processed.replace(/~~(.+?)~~/g, '<del>$1</del>');
     processed = processed.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
 
-    // 7. Horizontal rules (--- or ***)
-    processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gim, '<hr class="md-hr">');
+    // 8. Headers with clear visual hierarchy
+    processed = processed.replace(/^###### (.*$)/gim, '<h6 class="md-h6">$1</h6>');
+    processed = processed.replace(/^##### (.*$)/gim, '<h6 class="md-h5">$1</h6>');
+    processed = processed.replace(/^#### (.*$)/gim, '<h5 class="md-h4">$1</h5>');
+    processed = processed.replace(/^### (.*$)/gim, '<h4 class="md-h3">$1</h4>');
+    processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h2">$1</h3>');
+    processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h1">$1</h2>');
 
-    // 8. Headers
-    processed = processed.replace(/^##### (.*$)/gim, '<h6 class="md-h6">$1</h6>');
-    processed = processed.replace(/^#### (.*$)/gim, '<h5 class="md-h5">$1</h5>');
-    processed = processed.replace(/^### (.*$)/gim, '<h4 class="md-h4">$1</h4>');
-    processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h3">$1</h3>');
-    processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h2">$1</h2>');
+    // 9. Blockquotes: &gt; quote
+    processed = processed.replace(/(?:^|\n)((?:^[ \t]*(?:&gt;|>)[ \t]?[^\n]+(?:\n|$))+)/gm, (match, quoteBlock) => {
+        const cleaned = quoteBlock.split(/\n/).map(l => l.replace(/^[ \t]*(?:&gt;|>)[ \t]?/, '').trim()).filter(Boolean).join('<br>');
+        return `\n\n<blockquote class="md-blockquote"><p>${cleaned}</p></blockquote>\n\n`;
+    });
 
-    // 9. Bullet lists
-    processed = processed.replace(/^\s*[-*]\s+(.*$)/gim, '<li class="md-li">$1</li>');
-    processed = processed.replace(/((?:<li class="md-li">.*?<\/li>\s*)+)/gis, '<ul class="md-ul">$1</ul>');
+    // 10. Horizontal rules (--- or ***)
+    processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gim, '\n\n<hr class="md-hr">\n\n');
 
-    // 10. Line breaks
-    processed = processed.replace(/\n\n+/g, '</p><p>');
-    processed = processed.replace(/\n/g, '<br>');
-    processed = `<p>${processed}</p>`;
-    processed = processed.replace(/<p>\s*<\/p>/g, '');
+    // 11. Ordered lists (1. Item)
+    processed = processed.replace(/(?:^|\n)((?:^[ \t]*\d+\.[ \t]+[^\n]+(?:\n|$))+)/gm, (match, listBlock) => {
+        const items = listBlock.split(/\n/).filter(l => l.trim()).map(l => {
+            const itemText = l.replace(/^[ \t]*\d+\.[ \t]+/, '').trim();
+            return `<li class="md-oli">${itemText}</li>`;
+        }).join('');
+        return `\n\n<ol class="md-ol">${items}</ol>\n\n`;
+    });
 
-    // 11. Reinsert inline math
+    // 12. Bullet lists (- or * or +)
+    processed = processed.replace(/(?:^|\n)((?:^[ \t]*[-*+][ \t]+[^\n]+(?:\n|$))+)/gm, (match, listBlock) => {
+        const items = listBlock.split(/\n/).filter(l => l.trim()).map(l => {
+            const itemText = l.replace(/^[ \t]*[-*+][ \t]+/, '').trim();
+            return `<li class="md-uli">${itemText}</li>`;
+        }).join('');
+        return `\n\n<ul class="md-ul">${items}</ul>\n\n`;
+    });
+
+    // 13. Group block elements into paragraphs
+    const blocks = processed.split(/\n\n+/).map(b => b.trim()).filter(Boolean);
+    const finalBlocks = blocks.map(block => {
+        if (/^<(?:h[1-6]|ul|ol|table|blockquote|hr|div|__CODE_|__MATH_|__TABLE_|__IMG_)/.test(block)) {
+            return block;
+        }
+        return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+    });
+
+    processed = finalBlocks.join('\n');
+
+    // 14. Reinsert inline math
     inlineMath.forEach((item, index) => {
         const placeholder = `__INLINE_MATH_${index}__`;
         const rendered = renderMath(item, false);
         processed = processed.replace(new RegExp(placeholder, 'g'), rendered);
     });
 
-    // 11.5 Reinsert image cards
+    // 14.5 Reinsert tables
+    tableBlocks.forEach((tableHtml, index) => {
+        const placeholder = `__TABLE_BLOCK_${index}__`;
+        processed = processed.replace(new RegExp(placeholder, 'g'), tableHtml);
+    });
+
+    // 15. Reinsert image cards
     imageBlocks.forEach((item, index) => {
         const placeholder = `__IMG_BLOCK_${index}__`;
         const safeAlt = escapeHtml(item.alt);
