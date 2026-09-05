@@ -11,7 +11,7 @@ const EXPLICIT_IMAGE_PATTERNS = [
     /^\s*(?:draw|paint)\s+(?:me\s+)?(?:an?\s+)?(.*)/i,
     /^\s*(?:generate|create|render)\s+(?:an?\s+)?(?:artwork|illustration|wallpaper)\s*(?:of|for)?\s*(.*)/i,
     // Follow-ups, corrections & centering
-    /(?:correct|fix|adjust|re-?generate|redo|re-?create|update|modify)\s+(?:this\s+)?(?:one\s+)?(?:and\s+)?(?:generate\s+)?(?:a\s+)?(?:new\s+)?(?:image|pic|picture|photo)?/i,
+    /(?:correct|fix|adjust|re-?generate|redo|re-?create|update|modify)\s+(?:this\s+)?(?:one\s+)?(?:and\s+)?(?:generate\s+)?(?:a\s+)?(?:new\s+)?(?:image|pic|picture|photo|artwork)\b/i,
     /(?:centrali[zs]e|center)\s+(?:the\s+)?(?:image|picture|photo|car|vehicle|subject|object)/i,
     /why\s+(?:is|isn['’]?t)?\s*(?:this|the)?\s*(?:car|image|picture|subject)?\s*(?:is|isn['’]?t)?\s*(?:not\s+)?(?:centrali[zs]ed|centered|in\s+center)/i,
     /(?:make|show)\s+(?:it|the\s+car|the\s+image)\s+(?:more\s+)?(?:centrali[zs]ed|centered)/i,
@@ -52,6 +52,11 @@ function isImageGenerationRequest(text, history = []) {
     if (!text || typeof text !== 'string') return false;
     const trimmed = text.trim();
     if (!trimmed) return false;
+
+    // Strict guard: Coding, debugging, fixing code, or software engineering questions are NEVER images
+    if (/\b(code|function|syntax|error|bug|algorithm|program|script|class|java|python|javascript|typescript|c\+\+|sql|react|html|css)\b/i.test(trimmed)) {
+        return false;
+    }
 
     // Explicit command always wins
     if (EXPLICIT_IMAGE_PATTERNS.some(p => p.test(trimmed))) {

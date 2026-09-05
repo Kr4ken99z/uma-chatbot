@@ -6,7 +6,7 @@ const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const hasRealApiKey = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here';
 
 async function sendMessage(userMessage, history = []) {
-    const response = await fetchGroq(userMessage, history, false);
+    const response = await fetchGroqWithFallback(userMessage, history, false);
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -23,7 +23,7 @@ async function sendMessage(userMessage, history = []) {
 }
 
 async function streamMessage(userMessage, history = [], onChunk) {
-    const response = await fetchGroq(userMessage, history, true);
+    const response = await fetchGroqWithFallback(userMessage, history, true);
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -52,21 +52,39 @@ function buildGroqMessages(userMessage, history = []) {
     return messages;
 }
 
-function fetchGroq(userMessage, history = [], stream = false) {
-    return fetch(GROQ_CHAT_URL, {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${GROQ_API_KEY}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: GROQ_MODEL,
-            messages: buildGroqMessages(userMessage, history),
-            temperature: 0.7,
-            max_tokens: GROQ_MAX_OUTPUT_TOKENS,
-            stream,
-        }),
-    });
+async function fetchGroqWithFallback(userMessage, history = [], stream = false) {
+    const models = [...new Set([GROQ_MODEL, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b'])].filter(Boolean);
+    let lastResponse = null;
+
+    for (const model of models) {
+        lastResponse = await fetch(GROQ_CHAT_URL, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model,
+                messages: buildGroqMessages(userMessage, history),
+                temperature: 0.7,
+                max_tokens: GROQ_MAX_OUTPUT_TOKENS,
+                stream,
+            }),
+        });
+
+        if (lastResponse.ok) {
+            return lastResponse;
+        }
+
+        if (lastResponse.status === 429 || lastResponse.status === 404) {
+            console.warn(`Groq model ${model} returned ${lastResponse.status}, trying fallback model...`);
+            continue;
+        }
+
+        break;
+    }
+
+    return lastResponse;
 }
 
 async function readGroqStream(response, onChunk) {
