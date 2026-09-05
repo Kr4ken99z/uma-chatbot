@@ -1,4 +1,4 @@
-const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL, TOGETHER_API_KEY } = require('../utils/config');
+const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL } = require('../utils/config');
 
 // Patterns to detect when a user is asking for image creation or modification
 const IMAGE_REQUEST_PATTERNS = [
@@ -145,57 +145,6 @@ async function generateWithNvidia(prompt) {
 }
 
 /**
- * Generates an image using Together AI (FLUX.1-schnell)
- * @param {string} prompt
- * @returns {Promise<string|null>}
- */
-async function generateWithTogether(prompt) {
-    if (!TOGETHER_API_KEY) return null;
-
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const res = await fetch('https://api.together.xyz/v1/images/generations', {
-            method: 'POST',
-            signal: controller.signal,
-            headers: {
-                'Authorization': `Bearer ${TOGETHER_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'black-forest-labs/FLUX.1-schnell',
-                prompt: prompt,
-                width: 1024,
-                height: 768,
-                steps: 4,
-                n: 1,
-                response_format: 'b64_json',
-            }),
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-            console.warn('Together AI image returned status:', res.status);
-            return null;
-        }
-
-        const data = await res.json();
-        const b64 = data?.data?.[0]?.b64_json;
-        if (b64 && b64.length > 1000) {
-            return `data:image/jpeg;base64,${b64}`;
-        }
-        if (data?.data?.[0]?.url) {
-            return data.data[0].url;
-        }
-    } catch (err) {
-        console.warn('Together AI generation error or timeout:', err.message);
-    }
-    return null;
-}
-
-/**
  * Creates an image URL based on the visual prompt (High-fidelity FLUX engine)
  * Always centers vehicles and subjects with wide landscape framing so no portion is cut off.
  * @param {string} prompt
@@ -237,15 +186,10 @@ function buildImageUrl(prompt, options = {}) {
 async function generateImageReply(prompt, history = []) {
     const cleanPrompt = extractImagePrompt(prompt, history) || prompt.trim();
     
-    // 1. Primary: Together AI FLUX.1 (if active)
-    let imageUrl = await generateWithTogether(cleanPrompt);
+    // Primary: NVIDIA Build API
+    let imageUrl = await generateWithNvidia(cleanPrompt);
 
-    // 2. Secondary: Fast NVIDIA Build API
-    if (!imageUrl) {
-        imageUrl = await generateWithNvidia(cleanPrompt);
-    }
-
-    // 3. High-fidelity uncropped FLUX engine
+    // Fallback: High-fidelity uncropped FLUX engine
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
     }
@@ -277,15 +221,10 @@ async function streamImageReply(prompt, history, onChunk) {
 
     onChunk('[[CREATING_IMAGE]]');
 
-    // 1. Primary: Together AI FLUX.1 (if active)
-    let imageUrl = await generateWithTogether(cleanPrompt);
+    // Primary: NVIDIA Build API
+    let imageUrl = await generateWithNvidia(cleanPrompt);
 
-    // 2. Secondary: Fast NVIDIA Build API
-    if (!imageUrl) {
-        imageUrl = await generateWithNvidia(cleanPrompt);
-    }
-
-    // 3. High-fidelity uncropped FLUX engine
+    // Fallback: High-fidelity uncropped FLUX engine
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
     }
