@@ -1,7 +1,7 @@
 /**
  * Intelligent Image Prompt Expander, Normalizer & Intent Detector
- * Transforms user requests (e.g. "generate an image of bmw m5 comp")
- * into normalized entities ("BMW M5 Competition") and high-fidelity model-accurate prompts.
+ * Transforms user requests (e.g. "generate an image of BMW M5", "generate an image of a car", "BMW M5")
+ * into normalized entities ("BMW M5") and high-fidelity model-accurate prompts.
  * Strictly preserves user constraints (color, environment, lighting, vehicle trim) without generic substitution.
  */
 
@@ -25,11 +25,11 @@ const VISUAL_ENTITY_PATTERNS = [
     // Specific vehicle models, trims & brands
     /\b(?:bmw(?:\s+m[1-8]|\s+comp|\s+competition|\s+x[1-7]|\s+i[3-8]|\s+[1-8]\s*series)?|mercedes(?:\s*(?:benz|amg|maybach|gt|s-?class|c-?class|e-?class))?|amg\s+gt|porsche(?:\s*(?:911|taycan|panamera|gt[23]|cayenne|macan))?|ferrari|lamborghini|audi(?:\s*(?:r8|rs[3-7]|e-?tron))?|bugatti|mclaren|aston\s+martin|corvette|mustang|camaro|nissan\s+gt-?r|tesla(?:\s*(?:model\s+[s3xy]|cybertruck))?)\b/i,
     // General vehicles
-    /\b(?:sports?\s+car|supercar|hypercar|luxury\s+car|sedan|coupe|suv|motorcycle|superbike|vehicle)\b/i,
+    /\b(?:cars?|sports?\s*cars?|supercars?|hypercars?|luxury\s+cars?|sedans?|coupes?|suvs?|motorcycles?|superbikes?|vehicles?)\b/i,
     // Animals
-    /\b(?:dog|puppy|cat|kitten|lion|tiger|wolf|eagle|horse|elephant|panda|bear|fox|owl|cheetah|leopard|golden\s+retriever|husky|german\s+shepherd)\b/i,
+    /\b(?:dogs?|pupp(?:y|ies)|cats?|kittens?|lions?|tigers?|wolves|wolf|eagles?|horses?|elephants?|pandas?|bears?|fox(?:es)?|owls?|cheetahs?|leopards?|golden\s+retrievers?|husk(?:y|ies)|german\s+shepherds?)\b/i,
     // Landscapes & nature
-    /\b(?:mountain|mountains|sunset|sunrise|waterfall|forest|ocean|beach|aurora\s+borealis|northern\s+lights|desert|galaxy|nebula|milky\s+way)\b/i,
+    /\b(?:mountains?|peaks?|sunsets?|sunrises?|waterfalls?|forests?|oceans?|beach(?:es)?|aurora\s+borealis|northern\s+lights|deserts?|galax(?:y|ies)|nebulas?|milky\s+way)\b/i,
     // Sci-fi & architectural
     /\b(?:futuristic\s+city|cyberpunk\s+city|cyberpunk|sci-?fi\s+city|tokyo\s+at\s+night|neon\s+city)\b/i,
 ];
@@ -155,7 +155,7 @@ function normalizeSubjectAndConstraints(rawInput) {
     let clean = extractImagePrompt(rawInput) || String(rawInput || '').trim();
     clean = clean.trim().replace(/^["']|["']$/g, '');
 
-    // 2. Extract constraints
+    // 1. Extract constraints
     let color = null;
     const colorMatch = clean.match(COLOR_REGEX);
     if (colorMatch) {
@@ -177,7 +177,7 @@ function normalizeSubjectAndConstraints(rawInput) {
         timeAtmosphere = timeMatch[0].trim().toLowerCase();
     }
 
-    // 3. Strip color, location, and time from clean text to isolate the core entity
+    // 2. Strip color, location, and time from clean text to isolate the core entity
     let coreEntity = clean;
     if (color) {
         coreEntity = coreEntity.replace(new RegExp(`\\b${color}\\b`, 'i'), '');
@@ -191,10 +191,10 @@ function normalizeSubjectAndConstraints(rawInput) {
     // Clean up residual glue words
     coreEntity = coreEntity.replace(/\b(a|an|the|finish|color|with|and|showing)\b/gi, ' ').replace(/\s+/g, ' ').trim();
 
-    // 4. Intelligently normalize brand, model, and trim abbreviations
+    // 3. Intelligently normalize brand, model, and trim abbreviations
     let normalizedEntity = normalizeVehicleOrSubject(coreEntity || clean);
 
-    // 5. Build normalizedImageRequest
+    // 4. Build normalizedImageRequest
     const constraintParts = [
         color ? `${color} ` : '',
         normalizedEntity,
@@ -272,6 +272,8 @@ function normalizeVehicleOrSubject(rawSubject) {
 
 /**
  * Creates an expert, model-accurate FLUX image generation prompt
+ * Automatically converts user request into detailed visual instructions
+ * while preserving all core entities, colors, locations, and time of day.
  * @param {object} parsed
  * @returns {string}
  */
@@ -282,21 +284,21 @@ function createHighQualityPrompt(parsed) {
     const locDesc = location ? `in ${location}` : 'in a luxury modern architectural pavilion';
     const timeDesc = timeAtmosphere ? ` ${timeAtmosphere}` : '';
     const envDesc = `set ${locDesc}${timeDesc}`;
+    const envSuffix = (location || timeAtmosphere) ? `, set ${locDesc}${timeDesc}` : '';
 
     // 1. SPECIFIC BMW M5 / M5 COMPETITION
     if (/BMW M5/i.test(coreEntity)) {
         const isComp = /Competition/i.test(coreEntity);
-        const modelName = isComp ? 'BMW M5 Competition' : 'BMW M5';
-        const specificDetails = isComp
-            ? 'authentic BMW M5 Competition high-performance sports sedan silhouette, distinctive aggressive kidney grille with black high-gloss double slats, official M5 Competition badging, signature M quad exhaust system, carbon-fiber roof, sculpted M performance mirrors, precision forged M alloy wheels,'
-            : 'authentic BMW M5 high-performance sports sedan silhouette, distinctive aggressive kidney grille, official M badging, signature M quad exhaust, precision performance alloy wheels,';
+        if (isComp) {
+            return `Create a photorealistic image of a ${color ? `${color} ` : ''}BMW M5 Competition${envSuffix}. Accurately depict the BMW M5 Competition as a high-performance sports sedan with authentic BMW M5 Competition silhouette, aggressive M-specific styling, distinctive high-gloss black double-slat kidney grille, official M5 Competition badging, M quad exhaust system, carbon-fiber roof, sculpted M performance mirrors, precision forged M alloy wheels, realistic body details, and realistic lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model or standard 5 Series sedan.`;
+        }
 
-        return `Create a photorealistic image of a ${modelName} in ${colorDesc}, ${envDesc}. Accurately depict the ${specificDetails} realistic body details, and realistic automotive lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model or standard 5 Series sedan.`;
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}BMW M5${envSuffix}. Accurately depict the BMW M5 as a high-performance sports sedan with correct BMW M5 proportions, aggressive M-specific styling, distinctive kidney grille, M badging, performance wheels, realistic body details and lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model.`;
     }
 
     // 2. OTHER SPECIFIC BMW MODELS (M2, M3, M4, M8, etc.)
     if (/BMW M[1-8]/i.test(coreEntity)) {
-        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the authentic ${coreEntity} high-performance proportions, signature BMW kidney grille, official M badging, aerodynamic body contours, performance wheels, and realistic automotive lighting. Front three-quarter dynamic angle, cinematic automotive photography, 8k resolution, razor-sharp reflections. Do not substitute another model.`;
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}${coreEntity}${envSuffix}. Accurately depict the ${coreEntity} as a high-performance sports vehicle with authentic ${coreEntity} proportions, signature BMW kidney grille, official M badging, aggressive aerodynamic body contours, performance wheels, and realistic automotive lighting. Front three-quarter dynamic angle, cinematic professional automotive photography, 8k resolution, razor-sharp reflections. Do not substitute another model.`;
     }
 
     // 3. MERCEDES-AMG GT / MERCEDES-AMG
@@ -306,47 +308,76 @@ function createHighQualityPrompt(parsed) {
             ? 'authentic low-slung wide fastback coupe stance, signature Panamericana vertical-slat grille, active aerodynamic rear spoiler, large front air intakes, AMG twin-tailpipe exhaust, precision AMG performance wheels,'
             : 'authentic sculpted aerodynamic body lines, signature AMG sports grille, quad exhaust, precision AMG performance wheels,';
 
-        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the ${specificDetails} premium metallic finish, realistic reflections, and dramatic lighting. Front three-quarter dynamic shot, cinematic automotive photography, 8k resolution, razor-sharp focus. Do not substitute a generic Mercedes.`;
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}${coreEntity}${envSuffix}. Accurately depict the ${specificDetails} premium metallic finish, realistic reflections, and dramatic lighting. Front three-quarter dynamic shot, cinematic automotive photography, 8k resolution, razor-sharp focus. Do not substitute a generic Mercedes.`;
     }
 
-    // 4. PORSCHE 911
+    // 4. MERCEDES-BENZ (When user requests "Mercedes")
+    if (/Mercedes-Benz/i.test(coreEntity)) {
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}Mercedes-Benz luxury vehicle${envSuffix}. Accurately depict the authentic Mercedes-Benz with iconic star-centered chrome grille, elegant sculpted aerodynamic body lines, sophisticated LED headlights, luxury alloy wheels, and pristine glossy finish with realistic environment reflections. Front three-quarter beauty view, cinematic professional automotive photography, dramatic lighting, 8k resolution. Do not substitute a generic vehicle.`;
+    }
+
+    // 5. PORSCHE 911
     if (/Porsche 911/i.test(coreEntity)) {
-        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the iconic rear-engine coupe silhouette, signature round LED matrix headlights, wide muscular rear fenders, authentic Porsche crest, and precision performance wheels. Front three-quarter beauty view, cinematic professional automotive photography, realistic reflections, 8k resolution, razor-sharp detail. Do not substitute a generic sports car.`;
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}Porsche 911${envSuffix}. Accurately depict the iconic rear-engine coupe silhouette, signature round LED matrix headlights, wide muscular rear fenders, authentic Porsche crest, and precision performance wheels. Front three-quarter beauty view, cinematic professional automotive photography, realistic reflections, 8k resolution, razor-sharp detail. Do not substitute a generic sports car.`;
     }
 
-    // 5. FERRARI
+    // 6. FERRARI
     if (/Ferrari/i.test(coreEntity)) {
         const cDesc = color ? `${color} finish` : 'iconic Rosso Corsa red';
-        return `Create a photorealistic image of a ${coreEntity} in ${cDesc}, ${envDesc}. Accurately depict the exotic Italian supercar with authentic aerodynamic sculpting, signature prancing horse badge, aggressive front splitter, performance alloy wheels, and glossy finish. Front three-quarter dynamic view, professional automotive photography, dramatic lighting, 8k resolution.`;
+        return `Create a photorealistic image of a Ferrari in ${cDesc}${envSuffix}. Accurately depict the exotic Italian supercar with authentic aerodynamic sculpting, signature prancing horse badge, aggressive front splitter, performance alloy wheels, and glossy finish. Front three-quarter dynamic view, professional automotive photography, dramatic lighting, 8k resolution.`;
     }
 
-    // 6. LAMBORGHINI
+    // 7. LAMBORGHINI
     if (/Lamborghini/i.test(coreEntity)) {
-        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the sharp, aggressive angular wedge design, signature Y-shaped LED lights, raging bull badge, wide performance stance, and realistic reflections. Front three-quarter view, cinematic supercar photography, 8k resolution.`;
+        return `Create a photorealistic image of a ${color ? `${color} ` : ''}Lamborghini${envSuffix}. Accurately depict the sharp, aggressive angular wedge design, signature Y-shaped LED lights, raging bull badge, wide performance stance, and realistic reflections. Front three-quarter view, cinematic supercar photography, 8k resolution.`;
     }
 
-    // 7. GENERAL VEHICLE (car, sports car, supercar)
-    if (/\b(car|supercar|sports\s*car|sedan|coupe|suv|motorcycle)\b/i.test(coreEntity)) {
-        return `Create a photorealistic, stunning image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Front three-quarter beauty shot, accurate vehicle proportions, sleek metallic bodywork with realistic environment reflections, crisp LED headlights, and elegant alloy wheels. Professional automotive studio photography, dramatic lighting, 8k resolution.`;
+    // 8. SPORTS CAR / SUPERCAR
+    if (/\b(sports?\s*cars?|supercars?|hypercars?)\b/i.test(coreEntity)) {
+        const cDesc = color ? `${color} finish` : 'glossy metallic finish';
+        return `Create a photorealistic, stunning image of a high-performance ${coreEntity} in ${cDesc}${envSuffix}. Low-slung aerodynamic silhouette, aggressive front air intakes, sculpted side air ducts, high-performance alloy wheels, and sleek LED headlights. Professional automotive studio photography, front three-quarter beauty angle, dramatic rim lighting, crystal-clear reflections, 8k resolution, razor-sharp detail.`;
     }
 
-    // 8. DOG / PUPPY
-    if (/\b(dog|puppy|canine|golden\s*retriever|husky|german\s*shepherd)\b/i.test(coreEntity)) {
-        return `Create a high-quality, heartwarming professional photograph of a ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Natural anatomy, beautifully detailed fur texture, expressive alert eyes, soft ambient natural lighting, shallow depth of field, 8k resolution, crystal clear detail.`;
+    // 9. GENERAL CAR / VEHICLE (car, sedan, coupe, suv, motorcycle)
+    if (/\b(cars?|sedans?|coupes?|suvs?|luxury\s*cars?|vehicles?|motorcycles?)\b/i.test(coreEntity)) {
+        const cDesc = color ? `${color} finish` : 'glossy metallic finish';
+        return `Create a photorealistic, stunning image of a ${coreEntity} in ${cDesc}${envSuffix}. Front three-quarter beauty shot, accurate vehicle proportions, sleek metallic bodywork with realistic environment reflections, crisp LED headlights, and elegant alloy wheels. Professional automotive studio photography, dramatic lighting, 8k resolution.`;
     }
 
-    // 9. CAT / KITTEN
-    if (/\b(cat|kitten|feline)\b/i.test(coreEntity)) {
-        return `Create a high-quality, adorable professional photograph of a ${coreEntity}. Natural anatomy, fine whiskered details, soft fur texture, captivating luminous eyes, soft ambient natural lighting, shallow depth of field, 8k resolution.`;
+    // 10. DOG / PUPPY
+    if (/\b(dogs?|pupp(?:y|ies)|canine|golden\s*retriever|husky|german\s*shepherd|labrador)\b/i.test(coreEntity)) {
+        const cDesc = color ? `${color} coat, ` : '';
+        return `Create a high-quality, heartwarming professional photograph of a ${coreEntity} with ${cDesc}alert and expressive luminous eyes, fine detailed fur texture, and healthy natural anatomy. Soft ambient natural golden hour lighting, beautiful shallow depth of field with a gently blurred scenic outdoor background${envSuffix}, crystal-clear 8k resolution, award-winning animal photography.`;
     }
 
-    // 10. MOUNTAIN / LANDSCAPE
-    if (/\b(mountain|mountains|peak|peaks|alps|landscape)\b/i.test(coreEntity)) {
-        return `Create a majestic, breathtaking landscape photograph of a ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Towering snow-capped peaks, rugged alpine rock textures, dramatic atmospheric clouds and golden hour sunlight catching the ridges. Wide-angle cinematic composition, stunning volumetric depth, 8k resolution, ultra-detailed.`;
+    // 11. CAT / KITTEN
+    if (/\b(cats?|kittens?|feline)\b/i.test(coreEntity)) {
+        const cDesc = color ? `${color} coat, ` : '';
+        return `Create a high-quality, adorable professional photograph of a ${coreEntity} with ${cDesc}fine whiskered details, soft lifelike fur texture, captivating luminous eyes, soft ambient natural lighting, shallow depth of field, 8k resolution.`;
     }
 
-    // 11. GENERAL HIGH-QUALITY EXPANSION
-    return `Create a photorealistic, stunning image of ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Centered dynamic composition, authentic details, realistic textures, cinematic lighting, high contrast, crystal-clear 8k resolution, razor-sharp focus, award-winning photography.`;
+    // 12. MOUNTAIN / LANDSCAPE
+    if (/\b(mountains?|peaks?|alps|himalayas|landscape)\b/i.test(coreEntity)) {
+        return `Create a majestic, breathtaking landscape photograph of a towering ${coreEntity}${envSuffix}. Grand snow-dusted alpine summits, rugged geological rock textures, dramatic atmospheric clouds rolling across the ridges, and radiant sunlight illuminating the mountain face. Wide-angle cinematic composition, immense volumetric depth, pristine natural beauty, ultra-detailed 8k resolution, award-winning landscape photography.`;
+    }
+
+    // 13. SUNSET / SUNRISE
+    if (/\b(sunsets?|sunrises?|dusk|dawn)\b/i.test(coreEntity)) {
+        return `Create a breathtaking, cinematic landscape photograph of a glorious ${coreEntity}${envSuffix}. Vibrant sky with warm golden, amber, and violet gradients, radiant sunbeams piercing through scattered clouds, casting long atmospheric shadows and rich golden reflections. Stunning dynamic range, 8k resolution, award-winning fine art landscape photography.`;
+    }
+
+    // 14. FUTURISTIC CITY / CYBERPUNK
+    if (/\b(futuristic\s+city|cyberpunk\s+city|cyberpunk|sci-?fi\s+city|neon\s+city)\b/i.test(coreEntity)) {
+        return `Create a visually stunning, cinematic image of a hyper-advanced ${coreEntity}${envSuffix}. Soaring architectural megastructures with intricate skybridges, luminous holographic neon advertisements, glowing transit corridors with sleek aerodynamic vehicles, atmospheric misty haze, and wet street reflections. Rich volumetric lighting, epic scale, 8k resolution, science fiction concept art masterpiece.`;
+    }
+
+    // 15. PORTRAIT / PEOPLE
+    if (/\b(portraits?|persons?|people|wom[ae]n|m[ae]n|girls?|boys?)\b/i.test(coreEntity)) {
+        return `Create a high-quality, professional portrait photograph of a ${coreEntity}${envSuffix}. Natural anatomical proportions, realistic skin texture with subtle pores, lifelike expressive eyes, natural hair strands, and flattering studio portrait lighting. Shallow depth of field, 8k resolution, razor-sharp focus.`;
+    }
+
+    // 16. GENERAL HIGH-QUALITY EXPANSION
+    return `Create a photorealistic, stunning image of ${color ? `${color} ` : ''}${coreEntity}${envSuffix}. Centered dynamic composition, authentic details, realistic textures, cinematic lighting, high contrast, crystal-clear 8k resolution, razor-sharp focus, award-winning photography.`;
 }
 
 function transformToHighQualityPrompt(userSubject) {
@@ -361,3 +392,4 @@ module.exports = {
     createHighQualityPrompt,
     transformToHighQualityPrompt,
 };
+
