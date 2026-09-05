@@ -222,9 +222,9 @@ function buildImageUrl(prompt, options = {}) {
         : `${rawPrompt}, ${framing}`;
 
     const encoded = encodeURIComponent(enrichedPrompt);
-    // Use 16:9 widescreen ratio (1280x720) for vehicles so wide cars fit naturally with generous margins
-    const width = options.width || (isVehicle ? 1280 : 1024);
-    const height = options.height || (isVehicle ? 720 : 1024);
+    // Use 1024x1024 native FLUX resolution to guarantee perfect circular wheels and realistic proportions without stretching
+    const width = options.width || 1024;
+    const height = options.height || 1024;
     // Always use a unique seed so corrections & regenerations never show the same image
     const seed = options.seed || (Math.floor(Math.random() * 9000000) + 100000);
 
