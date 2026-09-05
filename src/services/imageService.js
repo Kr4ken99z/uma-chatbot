@@ -1,4 +1,4 @@
-const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL } = require('../utils/config');
+const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL, GEMINI_API_KEY, GEMINI_MODEL } = require('../utils/config');
 
 // Patterns to detect when a user is asking for image creation or modification
 const IMAGE_REQUEST_PATTERNS = [
@@ -145,6 +145,60 @@ async function generateWithNvidia(prompt) {
 }
 
 /**
+ * Expands a simple user prompt into a commercial beauty shot using Gemini (just like Gemini Imagen / Midjourney).
+ * If Gemini is unavailable, returns null to use the deterministic beauty shot builder.
+ * @param {string} rawPrompt
+ * @returns {Promise<string|null>}
+ */
+async function expandPromptWithGemini(rawPrompt) {
+    if (!GEMINI_API_KEY) return null;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL || 'gemini-3.6-flash'}:generateContent?key=${GEMINI_API_KEY}`;
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `You are a world-class commercial visual prompt artist for Midjourney and Gemini.
+A user asked for an image of: "${rawPrompt}".
+Write an ultra-high aesthetic, commercial magazine beauty shot prompt.
+Strict Rules:
+- Front three-quarter heroic beauty view showing the full subject with majestic presence
+- Gorgeous lighting (glowing lights, cinematic reflections, glossy vibrant colors)
+- Subject MUST be centered in frame with wide empty margins on all borders so it is 100% visible and NEVER cropped
+- Photorealistic 8k masterpiece, razor-sharp focus
+- Return ONLY the expanded prompt paragraph. Max 45 words. No intro or quotes.`
+                    }]
+                }],
+                generationConfig: {
+                    maxOutputTokens: 100,
+                    temperature: 0.7,
+                }
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+            const data = await res.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (text && text.length > 20) {
+                return text.replace(/^["']|["']$/g, '');
+            }
+        }
+    } catch (e) {
+        console.warn('Gemini prompt expansion fallback:', e.message);
+    }
+    return null;
+}
+
+/**
  * Creates an image URL based on the visual prompt (High-fidelity FLUX engine)
  * Always centers vehicles and subjects with wide landscape framing so no portion is cut off.
  * @param {string} prompt
@@ -155,16 +209,17 @@ function buildImageUrl(prompt, options = {}) {
     const rawPrompt = (prompt || 'serene artistic landscape').trim();
     const isVehicle = /(car|bmw|audi|mercedes|ferrari|porsche|lamborghini|vehicle|truck|bike|motorcycle|suv|sedan|coupe|m5|m6|m3|m4)/i.test(rawPrompt);
     
-    // Explicit centering and ample margin framing so subjects and bumpers are NEVER cut off
-    let framing = 'centered in dead center of frame, distant camera view with generous empty margins on all borders, full subject completely visible, completely uncropped, clean background, ultra-sharp focus, 8k resolution';
+    // Explicit front 3/4 heroic beauty view, glowing lights, vibrant colors, ample margins so front and rear are NEVER cut off
+    let framing = 'heroic front three-quarter dynamic beauty shot, centered in frame with generous empty margins on all borders, full subject completely visible, uncropped, glossy vibrant colors, cinematic rim lighting, 8k resolution, photorealistic masterpiece';
     if (isVehicle) {
-        framing = 'distant wide-angle camera shot, full body of the car centered in middle of frame, showing entire vehicle from front bumper to rear tail with wide margins on left and right, completely uncropped, clean studio road, ultra-high resolution 8k, photorealistic, pristine automotive lighting';
+        framing = 'commercial automotive hero shot, front three-quarter dynamic beauty view, glossy metallic paint with deep reflections, glowing iconic LED headlights and kidney grille, parked in luxury modern architectural pavilion, centered in frame with wide empty margins on left and right, completely uncropped, front bumper and rear tail fully visible, razor-sharp 8k resolution, award-winning car photography';
     }
 
-    const hasStyle = /(photorealistic|cyberpunk|anime|digital art|oil painting|3d render|watercolor|cinematic)/i.test(rawPrompt);
-    const enrichedPrompt = hasStyle 
-        ? `${rawPrompt}, ${framing}`
-        : `${rawPrompt}, ${framing}, masterpiece, photorealistic, 8k uhd`;
+    // If already expanded by Gemini, preserve it; otherwise apply commercial framing
+    const isAlreadyDetailed = rawPrompt.length > 80;
+    const enrichedPrompt = isAlreadyDetailed
+        ? rawPrompt
+        : `${rawPrompt}, ${framing}`;
 
     const encoded = encodeURIComponent(enrichedPrompt);
     // Use 16:9 widescreen ratio (1280x720) for vehicles so wide cars fit naturally with generous margins
@@ -186,12 +241,15 @@ function buildImageUrl(prompt, options = {}) {
 async function generateImageReply(prompt, history = []) {
     const cleanPrompt = extractImagePrompt(prompt, history) || prompt.trim();
     
-    // Primary: NVIDIA Build API
-    let imageUrl = await generateWithNvidia(cleanPrompt);
+    // Elevate prompt using Gemini beauty director
+    const expandedPrompt = (await expandPromptWithGemini(cleanPrompt)) || cleanPrompt;
 
-    // Fallback: High-fidelity uncropped FLUX engine
+    // Primary: NVIDIA Build API
+    let imageUrl = await generateWithNvidia(expandedPrompt);
+
+    // Fallback: High-fidelity uncropped FLUX engine with commercial beauty shot
     if (!imageUrl) {
-        imageUrl = buildImageUrl(cleanPrompt);
+        imageUrl = buildImageUrl(expandedPrompt);
     }
 
     const displayTitle = cleanPrompt.replace(/,.*$/, '').trim();
@@ -221,12 +279,15 @@ async function streamImageReply(prompt, history, onChunk) {
 
     onChunk('[[CREATING_IMAGE]]');
 
-    // Primary: NVIDIA Build API
-    let imageUrl = await generateWithNvidia(cleanPrompt);
+    // Elevate prompt using Gemini beauty director
+    const expandedPrompt = (await expandPromptWithGemini(cleanPrompt)) || cleanPrompt;
 
-    // Fallback: High-fidelity uncropped FLUX engine
+    // Primary: NVIDIA Build API
+    let imageUrl = await generateWithNvidia(expandedPrompt);
+
+    // Fallback: High-fidelity uncropped FLUX engine with commercial beauty shot
     if (!imageUrl) {
-        imageUrl = buildImageUrl(cleanPrompt);
+        imageUrl = buildImageUrl(expandedPrompt);
     }
 
     const displayTitle = cleanPrompt.replace(/,.*$/, '').trim();
