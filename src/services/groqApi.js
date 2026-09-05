@@ -53,7 +53,7 @@ function buildGroqMessages(userMessage, history = []) {
 }
 
 async function fetchGroqWithFallback(userMessage, history = [], stream = false) {
-    const models = [...new Set([GROQ_MODEL, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b'])].filter(Boolean);
+    const models = [...new Set([GROQ_MODEL, 'qwen/qwen3.8-27b', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b'])].filter(Boolean);
     let lastResponse = null;
 
     for (const model of models) {
