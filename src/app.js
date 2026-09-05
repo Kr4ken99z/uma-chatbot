@@ -13,39 +13,7 @@ const { JWT_SECRET } = require('./services/authService');
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// In-memory guest chat limiter (3 messages per guest session/IP)
-const guestChatCounts = new Map();
-const GUEST_MESSAGE_LIMIT = 3;
-function checkGuestLimit(req) {
-    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
-        const token = authHeader.slice(7).trim();
-        const secret = JWT_SECRET || process.env.JWT_SECRET || 'uma-chatbot-secret-key-2026-auth';
-        try {
-            const decoded = jwt.verify(token, secret);
-            if (decoded && decoded.id) {
-                return { isGuest: false, allowed: true, user: decoded }; // Logged-in: Unlimited
-            }
-        } catch (err) {
-            console.warn('Auth token verification failed in checkGuestLimit:', err.message);
-        }
-    }
 
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-    const count = (guestChatCounts.get(ip) || 0) + 1;
-    guestChatCounts.set(ip, count);
-
-    if (count > GUEST_MESSAGE_LIMIT) {
-        return {
-            isGuest: true,
-            allowed: false,
-            remaining: 0,
-            error: 'You have reached the free guest limit (3 chats). Please sign in or create an account to continue unlimited conversations!'
-        };
-    }
-
-    return { isGuest: true, allowed: true, remaining: GUEST_MESSAGE_LIMIT - count };
-}
 
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json({ limit: '1mb' }));
@@ -85,14 +53,6 @@ app.post('/api/chat', async (req, res) => {
         return res.status(400).json({ error: 'Message is required.' });
     }
 
-    const guestCheck = checkGuestLimit(req);
-    if (!guestCheck.allowed) {
-        return res.status(403).json({
-            error: guestCheck.error,
-            guestLimitReached: true,
-        });
-    }
-
     try {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         const result = await sendMessage(message, history);
@@ -111,14 +71,6 @@ app.post('/api/chat/stream', async (req, res) => {
 
     if (!message) {
         return res.status(400).json({ error: 'Message is required.' });
-    }
-
-    const guestCheck = checkGuestLimit(req);
-    if (!guestCheck.allowed) {
-        return res.status(403).json({
-            error: guestCheck.error,
-            guestLimitReached: true,
-        });
     }
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');

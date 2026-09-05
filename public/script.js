@@ -120,52 +120,27 @@ const guestModalSignUpBtn = document.getElementById('guestModalSignUpBtn');
 const guestModalSignInBtn = document.getElementById('guestModalSignInBtn');
 
 function getGuestChatCount() {
-    return parseInt(localStorage.getItem(GUEST_CHAT_KEY) || '0', 10);
+    return 0;
 }
 
 function incrementGuestChatCount() {
-    const current = getGuestChatCount();
-    const updated = current + 1;
-    localStorage.setItem(GUEST_CHAT_KEY, updated.toString());
-    updateGuestLimitUI();
-    return updated;
+    return 0;
 }
 
 function isGuestLimitReached() {
-    if (authToken) return false;
-    return getGuestChatCount() >= GUEST_CHAT_LIMIT;
+    return false;
 }
 
 function resetGuestChatCount() {
     localStorage.removeItem(GUEST_CHAT_KEY);
-    updateGuestLimitUI();
 }
 
 function updateGuestLimitUI() {
-    if (authToken) {
-        if (guestCounterBadge) guestCounterBadge.style.display = 'none';
-        return;
-    }
-
-    const count = getGuestChatCount();
-    const remaining = Math.max(0, GUEST_CHAT_LIMIT - count);
-
-    if (guestCounterBadge && guestChatsLeft) {
-        guestCounterBadge.style.display = 'inline-flex';
-        guestChatsLeft.textContent = remaining;
-
-        if (remaining === 0) {
-            guestCounterBadge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-            guestCounterBadge.style.color = '#ef4444';
-        } else if (remaining === 1) {
-            guestCounterBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-            guestCounterBadge.style.color = '#f59e0b';
-        } else {
-            guestCounterBadge.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-            guestCounterBadge.style.color = 'var(--muted)';
-        }
-    }
+    if (guestCounterBadge) guestCounterBadge.style.display = 'none';
 }
+
+// Clear any stored guest count so users are never blocked
+localStorage.removeItem(GUEST_CHAT_KEY);
 
 function showGuestLimitModal() {
     if (guestLimitModal && guestLimitBackdrop) {
@@ -748,12 +723,6 @@ async function handleFormSubmit(event) {
     const text = messageInput.value.trim();
     if (!text) return;
 
-    if (!authToken && getGuestChatCount() >= GUEST_CHAT_LIMIT) {
-        showGuestLimitModal();
-        showToast('Guest chat limit reached. Please sign in to continue.');
-        return;
-    }
-
     messageInput.value = '';
     autoResizeInput();
     updateClearInputButtonVisibility();
@@ -788,12 +757,6 @@ function showWelcomeView() {
 // -----------------------------------------------------------------------------
 
 async function streamUmaResponse(userPrompt) {
-    if (!authToken && getGuestChatCount() >= GUEST_CHAT_LIMIT) {
-        showGuestLimitModal();
-        showToast('Guest chat limit reached. Please sign in to continue.');
-        return;
-    }
-
     setLoading(true);
     activeAbortController = new AbortController();
 
@@ -827,22 +790,7 @@ async function streamUmaResponse(userPrompt) {
 
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
-            if (response.status === 403 && data.guestLimitReached) {
-                botTextElement?.closest('.uma-message')?.remove();
-                const activeConv = getActiveConversation();
-                if (activeConv && activeConv.messages && activeConv.messages[activeConv.messages.length - 1] === botMessage) {
-                    activeConv.messages.pop();
-                    saveConversations();
-                }
-                showGuestLimitModal();
-                showToast('Guest chat limit reached (3 chats). Please sign in for unlimited conversations!');
-                return;
-            }
             throw new Error(data.error || 'Uma could not respond right now.');
-        }
-
-        if (!authToken) {
-            incrementGuestChatCount();
         }
 
         updateStatus(true, 'Online');

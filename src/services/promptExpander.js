@@ -152,12 +152,7 @@ function extractImagePrompt(text, history = []) {
  * }}
  */
 function normalizeSubjectAndConstraints(rawInput) {
-    let clean = String(rawInput || '').trim();
-
-    // 1. Strip action prefixes
-    for (const pattern of EXPLICIT_IMAGE_PATTERNS.slice(0, 4)) {
-        clean = clean.replace(pattern, '');
-    }
+    let clean = extractImagePrompt(rawInput) || String(rawInput || '').trim();
     clean = clean.trim().replace(/^["']|["']$/g, '');
 
     // 2. Extract constraints

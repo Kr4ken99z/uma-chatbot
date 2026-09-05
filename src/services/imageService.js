@@ -13,53 +13,7 @@ const {
  * @returns {Promise<string|null>}
  */
 async function generateWithNvidia(prompt) {
-    if (!NVIDIA_API_KEY) return null;
-
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1200); // 1.2s timeout: fast fallback without user lag
-
-        const endpoint = `https://ai.api.nvidia.com/v1/genai/${NVIDIA_IMAGE_MODEL || 'black-forest-labs/flux.1-dev'}`;
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            signal: controller.signal,
-            headers: {
-                'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                prompt,
-                mode: 'base',
-                cfg_scale: 3.5,
-                width: 1024,
-                height: 1024,
-                steps: 16,
-            }),
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-            console.warn('NVIDIA image API returned status:', res.status);
-            return null;
-        }
-
-        const data = await res.json();
-        const art = data?.artifacts?.[0];
-
-        // Guard against content filtering
-        if (art && art.finishReason === 'CONTENT_FILTERED') {
-            console.warn('NVIDIA image content filtered, falling back to Flux engine');
-            return null;
-        }
-
-        if (art && art.base64 && art.base64.length > 20000) {
-            return `data:image/jpeg;base64,${art.base64}`;
-        }
-    } catch (err) {
-        console.warn('NVIDIA image generation error or timeout:', err.message);
-    }
+    // Pollinations FLUX engine provides instant client streaming without gateway stalls
     return null;
 }
 
@@ -72,7 +26,8 @@ async function generateWithNvidia(prompt) {
  */
 function buildImageUrl(prompt, options = {}) {
     const rawPrompt = (prompt || 'serene artistic landscape').trim();
-    const highQualityPrompt = transformToHighQualityPrompt(rawPrompt);
+    const isAlreadyDetailed = options.isExpanded || rawPrompt.startsWith('Create a ');
+    const highQualityPrompt = isAlreadyDetailed ? rawPrompt : transformToHighQualityPrompt(rawPrompt);
     const encoded = encodeURIComponent(highQualityPrompt);
 
     // Native 1024x1024 FLUX training resolution: guarantees perfect round wheels, zero horizontal stretching
@@ -101,7 +56,7 @@ async function generateImageReply(prompt, history = []) {
 
     // Fallback: High-fidelity uncropped FLUX engine with model-accurate prompt
     if (!imageUrl) {
-        imageUrl = buildImageUrl(internalPrompt);
+        imageUrl = buildImageUrl(internalPrompt, { isExpanded: true });
     }
 
     // Clean display title for user (e.g. "BMW M5 Competition", never exposes internal prompt details)
@@ -142,7 +97,7 @@ async function streamImageReply(prompt, history, onChunk) {
 
     // Fallback: High-fidelity uncropped FLUX engine with model-accurate prompt
     if (!imageUrl) {
-        imageUrl = buildImageUrl(internalPrompt);
+        imageUrl = buildImageUrl(internalPrompt, { isExpanded: true });
     }
 
     // Clean display title for user (e.g. "BMW M5 Competition", never exposes internal prompt details)
