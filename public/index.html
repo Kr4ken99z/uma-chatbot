@@ -37,12 +37,30 @@
                 <span class="shortcut" id="shortcutBadge">⌘ K</span>
             </button>
 
+            <!-- Projects Section -->
+            <section class="projects-section" id="projectsSection" aria-label="Projects">
+                <div class="section-label-row">
+                    <span class="label">Projects</span>
+                    <button class="text-button" id="newProjectBtn" type="button" title="Create new project">＋ New</button>
+                </div>
+                <div class="projects-list" id="projectsList" role="list"></div>
+            </section>
+
             <section class="history-section" aria-label="Chat history">
                 <div class="section-label-row">
-                    <span class="label">Recent chats</span>
+                    <span class="label" id="historySectionLabel">Recent chats</span>
                     <button class="text-button" id="clearChat" type="button" title="Clear all chat history">Clear</button>
                 </div>
+                <div class="project-filter-banner" id="projectFilterBanner" style="display:none;">
+                    <span class="project-filter-tag">📁 <b id="projectFilterName">Project</b></span>
+                    <button class="project-filter-clear" id="clearProjectFilterBtn" type="button" title="View all chats">✕</button>
+                </div>
                 <div class="history" id="historyList" role="list"></div>
+                <button class="archived-toggle-btn" id="archivedToggleBtn" type="button" style="display:none;">
+                    <span>📦 Archived chats (<b id="archivedCount">0</b>)</span>
+                    <span class="archived-chevron" id="archivedChevron">›</span>
+                </button>
+                <div class="history archived-list" id="archivedList" role="list" style="display:none;"></div>
             </section>
 
             <section class="prompts" aria-label="Suggested prompts">
@@ -414,6 +432,81 @@
         </div>
     </div>
 
-    <script src="script.js?v=20260903_v14_fixed"></script>
+    <!-- Chat Item Action Context Menu -->
+    <div class="chat-context-menu" id="chatContextMenu" style="display:none;" role="menu">
+        <button type="button" class="menu-item" id="menuRenameChat"><span class="menu-icon">✏️</span><span>Rename</span></button>
+        <button type="button" class="menu-item" id="menuPinChat"><span class="menu-icon" id="menuPinIcon">📌</span><span id="menuPinLabel">Pin</span></button>
+        <button type="button" class="menu-item" id="menuMoveChat"><span class="menu-icon">📁</span><span>Move to project</span></button>
+        <button type="button" class="menu-item" id="menuShareChat"><span class="menu-icon">🔗</span><span>Share</span></button>
+        <button type="button" class="menu-item" id="menuArchiveChat"><span class="menu-icon" id="menuArchiveIcon">📦</span><span id="menuArchiveLabel">Archive</span></button>
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item menu-item-danger" id="menuDeleteChat"><span class="menu-icon">🗑</span><span>Delete</span></button>
+    </div>
+
+    <!-- Project Item Action Context Menu -->
+    <div class="chat-context-menu" id="projectContextMenu" style="display:none;" role="menu">
+        <button type="button" class="menu-item" id="menuRenameProject"><span class="menu-icon">✏️</span><span>Rename project</span></button>
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item menu-item-danger" id="menuDeleteProject"><span class="menu-icon">🗑</span><span>Delete project</span></button>
+    </div>
+
+    <!-- Create / Rename Project Modal -->
+    <div class="uma-modal-backdrop" id="projectModalBackdrop" style="display:none;"></div>
+    <div class="uma-modal-dialog" id="projectModal" style="display:none;" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3 id="projectModalTitle">Create New Project</h3>
+            <button class="modal-close-btn" id="closeProjectModalBtn" type="button">✕</button>
+        </div>
+        <form id="projectForm" class="modal-form">
+            <div class="form-group">
+                <label for="projectNameInput">Project Name</label>
+                <input type="text" id="projectNameInput" placeholder="e.g. Portfolio Redesign, Q4 Report" required maxlength="100" />
+            </div>
+            <div class="form-group">
+                <label for="projectDescInput">Description (Optional)</label>
+                <textarea id="projectDescInput" placeholder="Brief project summary or instructions" rows="2" maxlength="300"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="modal-btn modal-btn-secondary" id="cancelProjectBtn">Cancel</button>
+                <button type="submit" class="modal-btn modal-btn-primary" id="saveProjectBtn">Save Project</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Move Chat to Project Modal -->
+    <div class="uma-modal-backdrop" id="moveModalBackdrop" style="display:none;"></div>
+    <div class="uma-modal-dialog" id="moveModal" style="display:none;" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3>Move to Project</h3>
+            <button class="modal-close-btn" id="closeMoveModalBtn" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc">Assign this conversation to a project to organize your workflow.</p>
+            <div class="project-picker-list" id="projectPickerList"></div>
+            <div class="modal-actions">
+                <button type="button" class="modal-btn modal-btn-secondary" id="removeFromProjectBtn">Remove from Project</button>
+                <button type="button" class="modal-btn modal-btn-secondary" id="cancelMoveBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Conversation Modal -->
+    <div class="uma-modal-backdrop" id="shareModalBackdrop" style="display:none;"></div>
+    <div class="uma-modal-dialog" id="shareModal" style="display:none;" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3>Share Conversation</h3>
+            <button class="modal-close-btn" id="closeShareModalBtn" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc">Anyone with this link will be able to read this conversation in view-only mode.</p>
+            <div class="share-link-box">
+                <input type="text" id="shareLinkInput" readonly value="" />
+                <button type="button" class="modal-btn modal-btn-primary" id="copyShareLinkBtn">Copy Link</button>
+            </div>
+            <div class="share-feedback" id="shareFeedback" style="display:none;">✓ Link copied to clipboard!</div>
+        </div>
+    </div>
+
+    <script src="script.js?v=20260905_v15_projects"></script>
 </body>
 </html>
