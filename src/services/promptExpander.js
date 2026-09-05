@@ -1,7 +1,8 @@
 /**
- * Intelligent Image Prompt Expander & Intent Detector
- * Transforms simple user requests into high-fidelity, model-accurate generation prompts
- * while preserving user intent, brand models, colors, environments, and styles.
+ * Intelligent Image Prompt Expander, Normalizer & Intent Detector
+ * Transforms user requests (e.g. "generate an image of bmw m5 comp")
+ * into normalized entities ("BMW M5 Competition") and high-fidelity model-accurate prompts.
+ * Strictly preserves user constraints (color, environment, lighting, vehicle trim) without generic substitution.
  */
 
 // Patterns to detect explicit image requests
@@ -19,14 +20,14 @@ const EXPLICIT_IMAGE_PATTERNS = [
     /(?:generate|create|make)\s+(?:a\s+)?(?:new|another)\s+(?:image|picture|photo)/i,
 ];
 
-// Visual entities that indicate image generation intent when typed as short standalone inputs (<= 5 words)
+// Visual entities that indicate image generation intent when typed as short standalone inputs (<= 12 words)
 const VISUAL_ENTITY_PATTERNS = [
-    // Specific vehicle models & brands
-    /\b(?:bmw(?:\s+m[1-8]|\s+x[1-7]|\s+i[3-8]|\s+[1-8]\s*series)?|mercedes(?:\s*(?:benz|amg|maybach|gt|s-?class|c-?class|e-?class))?|porsche(?:\s*(?:911|taycan|panamera|gt[23]|cayenne|macan))?|ferrari|lamborghini|audi(?:\s*(?:r8|rs[3-7]|e-?tron))?|bugatti|mclaren|aston\s+martin|corvette|mustang|camaro|nissan\s+gt-?r|tesla(?:\s*(?:model\s+[s3xy]|cybertruck))?)\b/i,
+    // Specific vehicle models, trims & brands
+    /\b(?:bmw(?:\s+m[1-8]|\s+comp|\s+competition|\s+x[1-7]|\s+i[3-8]|\s+[1-8]\s*series)?|mercedes(?:\s*(?:benz|amg|maybach|gt|s-?class|c-?class|e-?class))?|amg\s+gt|porsche(?:\s*(?:911|taycan|panamera|gt[23]|cayenne|macan))?|ferrari|lamborghini|audi(?:\s*(?:r8|rs[3-7]|e-?tron))?|bugatti|mclaren|aston\s+martin|corvette|mustang|camaro|nissan\s+gt-?r|tesla(?:\s*(?:model\s+[s3xy]|cybertruck))?)\b/i,
     // General vehicles
     /\b(?:sports?\s+car|supercar|hypercar|luxury\s+car|sedan|coupe|suv|motorcycle|superbike|vehicle)\b/i,
     // Animals
-    /\b(?:dog|puppy|cat|kitten|lion|tiger|wolf|eagle|horse|elephant|panda|bear|fox|owl|cheetah|leopard)\b/i,
+    /\b(?:dog|puppy|cat|kitten|lion|tiger|wolf|eagle|horse|elephant|panda|bear|fox|owl|cheetah|leopard|golden\s+retriever|husky|german\s+shepherd)\b/i,
     // Landscapes & nature
     /\b(?:mountain|mountains|sunset|sunrise|waterfall|forest|ocean|beach|aurora\s+borealis|northern\s+lights|desert|galaxy|nebula|milky\s+way)\b/i,
     // Sci-fi & architectural
@@ -41,6 +42,10 @@ const CONVERSATION_TRIGGERS = [
     /\?$/,
     /\b(?:president|prime\s+minister|capital|currency|definition|difference\s+between|tutorial|syntax|algorithm|code|function|javascript|python|java|html|css|c\+\+|sql)\b/i,
 ];
+
+const COLOR_REGEX = /\b(red|blue|black|white|silver|grey|gray|green|yellow|orange|purple|gold|matte\s+black|crimson|metallic\s+blue|alpine\s+white|nardo\s+grey|emerald\s+green|dark\s+grey|deep\s+blue)\b/i;
+const LOCATION_REGEX = /\b(?:in|at|on)\s+([A-Za-z0-9\s]+?)(?:$|\sat\s|\sin\s|\son\s|\sduring\s)/i;
+const TIME_ATMOSPHERE_REGEX = /\b(at\s+night|sunset|sunrise|golden\s+hour|rainy|snowy|foggy|dusk|dawn|cloudy|nighttime|daytime)\b/i;
 
 /**
  * Checks if a user prompt is requesting image generation
@@ -64,7 +69,7 @@ function isImageGenerationRequest(text, history = []) {
     }
 
     // Follow-ups if previous chat message had an image
-    const hasPreviousImage = history && history.some(h => h.text && h.text.includes('![' ));
+    const hasPreviousImage = history && history.some(h => h.text && h.text.includes('!['));
     if (hasPreviousImage) {
         const imageFeedbackRegex = /(centrali[zs]e|centered|center\s+it|crop|cropped|cut\s*off|new\s+image|another\s+image|regenerate|redo|fix\s+it|correct\s+it)/i;
         if (imageFeedbackRegex.test(trimmed)) {
@@ -77,7 +82,7 @@ function isImageGenerationRequest(text, history = []) {
         return false;
     }
 
-    // Short standalone visual entity checks (e.g. "BMW M5", "red BMW M5 in Tokyo at night", "Mercedes-AMG GT", "dog", "mountain")
+    // Short standalone visual entity checks (up to 12 words)
     const words = trimmed.split(/\s+/);
     if (words.length <= 12) {
         if (VISUAL_ENTITY_PATTERNS.some(p => p.test(trimmed))) {
@@ -134,127 +139,230 @@ function extractImagePrompt(text, history = []) {
 }
 
 /**
- * Transforms simple user input into an expert, high-quality, model-accurate image generation prompt.
- * Preserves user intent, specific vehicle models, colors, locations, and styling.
- * @param {string} userSubject
+ * Normalizes user subject and isolates constraints (color, location, time, entity)
+ * @param {string} rawInput
+ * @returns {{
+ *   originalUserRequest: string,
+ *   normalizedImageRequest: string,
+ *   coreEntity: string,
+ *   cleanTitle: string,
+ *   color: string|null,
+ *   location: string|null,
+ *   timeAtmosphere: string|null
+ * }}
+ */
+function normalizeSubjectAndConstraints(rawInput) {
+    let clean = String(rawInput || '').trim();
+
+    // 1. Strip action prefixes
+    for (const pattern of EXPLICIT_IMAGE_PATTERNS.slice(0, 4)) {
+        clean = clean.replace(pattern, '');
+    }
+    clean = clean.trim().replace(/^["']|["']$/g, '');
+
+    // 2. Extract constraints
+    let color = null;
+    const colorMatch = clean.match(COLOR_REGEX);
+    if (colorMatch) {
+        color = colorMatch[0].toLowerCase();
+    }
+
+    let location = null;
+    const locMatch = clean.match(LOCATION_REGEX);
+    if (locMatch && locMatch[1]) {
+        const candidateLoc = locMatch[1].trim();
+        if (!/\b(bmw|mercedes|porsche|ferrari|audi|car|m5|sedan|coupe)\b/i.test(candidateLoc)) {
+            location = candidateLoc;
+        }
+    }
+
+    let timeAtmosphere = null;
+    const timeMatch = clean.match(TIME_ATMOSPHERE_REGEX);
+    if (timeMatch) {
+        timeAtmosphere = timeMatch[0].trim().toLowerCase();
+    }
+
+    // 3. Strip color, location, and time from clean text to isolate the core entity
+    let coreEntity = clean;
+    if (color) {
+        coreEntity = coreEntity.replace(new RegExp(`\\b${color}\\b`, 'i'), '');
+    }
+    if (location) {
+        coreEntity = coreEntity.replace(new RegExp(`\\b(?:in|at|on)\\s+${location}\\b`, 'i'), '');
+    }
+    if (timeAtmosphere) {
+        coreEntity = coreEntity.replace(new RegExp(`\\b${timeAtmosphere}\\b`, 'i'), '');
+    }
+    // Clean up residual glue words
+    coreEntity = coreEntity.replace(/\b(a|an|the|finish|color|with|and|showing)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+
+    // 4. Intelligently normalize brand, model, and trim abbreviations
+    let normalizedEntity = normalizeVehicleOrSubject(coreEntity || clean);
+
+    // 5. Build normalizedImageRequest
+    const constraintParts = [
+        color ? `${color} ` : '',
+        normalizedEntity,
+        location ? ` in ${location}` : '',
+        timeAtmosphere ? ` ${timeAtmosphere}` : ''
+    ];
+    const normalizedImageRequest = constraintParts.join('').replace(/\s+/g, ' ').trim();
+
+    return {
+        originalUserRequest: rawInput,
+        normalizedImageRequest,
+        coreEntity: normalizedEntity,
+        cleanTitle: normalizedEntity,
+        color,
+        location,
+        timeAtmosphere
+    };
+}
+
+/**
+ * Normalizes abbreviations, model trims, and brand names
+ * @param {string} rawSubject
  * @returns {string}
  */
-function transformToHighQualityPrompt(userSubject) {
-    const raw = (userSubject || 'serene landscape').trim();
+function normalizeVehicleOrSubject(rawSubject) {
+    let s = rawSubject.trim();
 
-    // Check if already an expanded detailed prompt
-    if (raw.length > 150) {
-        return raw;
+    // Trim expansions
+    s = s.replace(/\bcomp\b/gi, 'Competition');
+    s = s.replace(/\bcompetition\b/gi, 'Competition');
+    s = s.replace(/\bcs\b/gi, 'CS');
+    s = s.replace(/\bcsl\b/gi, 'CSL');
+    s = s.replace(/\bgt-?r\b/gi, 'GT-R');
+    s = s.replace(/\bgt3\b/gi, 'GT3');
+    s = s.replace(/\bgt3\s*rs\b/gi, 'GT3 RS');
+    s = s.replace(/\bgt2\s*rs\b/gi, 'GT2 RS');
+
+    // Mercedes & Mercedes-AMG models
+    if (/\b(?:mercedes|amg|merc)\b/i.test(s)) {
+        if (/\bamg\s*gt\b/i.test(s)) {
+            s = s.replace(/\b(?:mercedes(?:\s*-\s*benz|\s+benz)?\s+)?amg\s*gt\b/gi, 'Mercedes-AMG GT');
+        } else if (/\bamg\b/i.test(s)) {
+            s = s.replace(/\b(?:mercedes(?:\s*-\s*benz|\s+benz)?\s+)?amg\b/gi, 'Mercedes-AMG');
+        } else {
+            s = s.replace(/\b(?:mercedes(?:\s*-\s*benz|\s+benz)?|merc)\b/gi, 'Mercedes-Benz');
+        }
     }
 
-    // Extract color modifier if present
-    const colorMatch = raw.match(/\b(red|blue|black|white|silver|grey|gray|green|yellow|orange|purple|gold|matte\s+black|crimson|metallic\s+blue)\b/i);
-    const color = colorMatch ? colorMatch[0] : null;
+    // BMW M models: "m5", "m3", "m4", "m8", "m2"
+    s = s.replace(/\b(?:bmw\s+)?m([1-8])\b/gi, 'BMW M$1');
+    s = s.replace(/\b(?:bmw)\b/gi, 'BMW');
+    s = s.replace(/\bBMW\s+BMW\b/g, 'BMW');
 
-    // Extract location / environment if present (without leading prepositions)
-    const locMatch = raw.match(/\b(?:in|at|on)\s+([A-Za-z0-9\s]+?)(?:$|\sat\s|\sin\s)/i);
-    const location = locMatch ? locMatch[1].trim() : null;
+    // Porsche models
+    s = s.replace(/\bporsche\s+911\b/gi, 'Porsche 911');
+    s = s.replace(/\b911\b/gi, 'Porsche 911');
+    s = s.replace(/\bPorsche\s+Porsche\s+911\b/g, 'Porsche 911');
 
-    // Extract time / atmosphere
-    const timeMatch = raw.match(/\b(at\s+night|sunset|sunrise|golden\s+hour|rainy|snowy|foggy|dusk|dawn)\b/i);
-    const timeAtmosphere = timeMatch ? timeMatch[0].trim() : null;
+    // Other exotic and performance brands
+    s = s.replace(/\blambo\b/gi, 'Lamborghini');
+    s = s.replace(/\blamborghini\b/gi, 'Lamborghini');
+    s = s.replace(/\bferrari\b/gi, 'Ferrari');
+    s = s.replace(/\bchevy\b/gi, 'Chevrolet');
+    s = s.replace(/\bvette\b/gi, 'Corvette');
+    s = s.replace(/\b(?:audi\s+)?rs([3-7])\b/gi, 'Audi RS$1');
+    s = s.replace(/\b(?:nissan\s+)?gt-?r\b/gi, 'Nissan GT-R');
 
-    const extraContext = [color ? `with ${color} finish` : null, location ? `in ${location}` : null, timeAtmosphere].filter(Boolean).join(', ');
-    const contextPhrase = extraContext ? ` (${extraContext})` : '';
-
-    // 1. SPECIFIC BMW M5 (Must NOT become a generic BMW sedan)
-    if (/\bbmw\s+m5\b/i.test(raw)) {
-        const colorDesc = color ? `${color} finish` : 'glossy metallic finish';
-        const envDesc = location ? `in ${location}` : 'in a luxury modern architectural pavilion';
-        const timeDesc = timeAtmosphere ? ` ${timeAtmosphere}` : '';
-        return `Create a photorealistic image of a BMW M5 in ${colorDesc}, set ${envDesc}${timeDesc}. Accurately depict the BMW M5 as a high-performance sports sedan with correct BMW M5 proportions, aggressive M-specific styling, distinctive kidney grille, M badging, performance wheels, realistic body details and lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model.`;
+    // Title case if single word or standard capitalized entity
+    if (!/^[A-Z]/.test(s)) {
+        s = s.charAt(0).toUpperCase() + s.slice(1);
     }
 
-    // 2. OTHER SPECIFIC BMW MODELS (M3, M4, M6, M8, i8, etc.)
-    const bmwSpecificMatch = raw.match(/\bbmw\s+(m[1-8]|x[1-7]|i[3-8]|[1-8]\s*series)\b/i);
-    if (bmwSpecificMatch) {
-        const model = bmwSpecificMatch[0].toUpperCase();
-        const colorDesc = color ? `${color}` : 'gleaming metallic';
-        return `Create a photorealistic image of a ${model} in ${colorDesc}${contextPhrase}. Accurately depict the ${model} with correct manufacturer proportions, authentic aggressive body contours, signature BMW kidney grille, official badging, performance wheels, and realistic automotive lighting. Front three-quarter angle, cinematic automotive photography, 8k resolution, realistic reflections. Do not substitute another model.`;
+    return s.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Creates an expert, model-accurate FLUX image generation prompt
+ * @param {object} parsed
+ * @returns {string}
+ */
+function createHighQualityPrompt(parsed) {
+    const { coreEntity, color, location, timeAtmosphere } = parsed;
+
+    const colorDesc = color ? `${color} finish` : 'glossy metallic finish';
+    const locDesc = location ? `in ${location}` : 'in a luxury modern architectural pavilion';
+    const timeDesc = timeAtmosphere ? ` ${timeAtmosphere}` : '';
+    const envDesc = `set ${locDesc}${timeDesc}`;
+
+    // 1. SPECIFIC BMW M5 / M5 COMPETITION
+    if (/BMW M5/i.test(coreEntity)) {
+        const isComp = /Competition/i.test(coreEntity);
+        const modelName = isComp ? 'BMW M5 Competition' : 'BMW M5';
+        const specificDetails = isComp
+            ? 'authentic BMW M5 Competition high-performance sports sedan silhouette, distinctive aggressive kidney grille with black high-gloss double slats, official M5 Competition badging, signature M quad exhaust system, carbon-fiber roof, sculpted M performance mirrors, precision forged M alloy wheels,'
+            : 'authentic BMW M5 high-performance sports sedan silhouette, distinctive aggressive kidney grille, official M badging, signature M quad exhaust, precision performance alloy wheels,';
+
+        return `Create a photorealistic image of a ${modelName} in ${colorDesc}, ${envDesc}. Accurately depict the ${specificDetails} realistic body details, and realistic automotive lighting. Front three-quarter dynamic beauty shot, cinematic professional automotive photography, highly detailed, realistic materials and reflections. Do not substitute another BMW model or standard 5 Series sedan.`;
     }
 
-    // 3. MERCEDES / MERCEDES-AMG (Must NOT become a generic Mercedes)
-    if (/\bmercedes\b/i.test(raw)) {
-        const isAmgGt = /\bamg\s*gt\b/i.test(raw);
-        const isAmg = /\bamg\b/i.test(raw) || isAmgGt;
-        const modelName = isAmgGt ? 'Mercedes-AMG GT supercar' : (isAmg ? 'Mercedes-AMG performance vehicle' : 'luxury Mercedes-Benz');
-        const colorDesc = color ? ` in ${color}` : '';
-        const amgDetails = isAmgGt ? 'iconic low-slung wide fastback stance, signature Panamericana vertical-slat grille, aggressive active aero spoiler,' : 'signature front grille with the three-pointed star emblem, sculpted aerodynamic body lines,';
-        return `Create a photorealistic image of a ${modelName}${colorDesc}${contextPhrase}. Accurately depict the authentic design language, ${amgDetails} premium metallic finish, and precision AMG performance alloy wheels. Front three-quarter dynamic shot, cinematic automotive photography, realistic materials and reflections, dramatic lighting, 8k resolution. Do not substitute a generic vehicle.`;
+    // 2. OTHER SPECIFIC BMW MODELS (M2, M3, M4, M8, etc.)
+    if (/BMW M[1-8]/i.test(coreEntity)) {
+        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the authentic ${coreEntity} high-performance proportions, signature BMW kidney grille, official M badging, aerodynamic body contours, performance wheels, and realistic automotive lighting. Front three-quarter dynamic angle, cinematic automotive photography, 8k resolution, razor-sharp reflections. Do not substitute another model.`;
     }
 
-    // 4. PORSCHE (911, etc.)
-    if (/\bporsche\b/i.test(raw)) {
-        const is911 = /911/i.test(raw);
-        const modelName = is911 ? 'Porsche 911 sports car' : 'Porsche vehicle';
-        const colorDesc = color ? ` in ${color}` : '';
-        return `Create a photorealistic image of a ${modelName}${colorDesc}${contextPhrase}. Accurately depict the iconic rear-engine coupe silhouette, signature round LED headlights, wide rear fenders, authentic Porsche crest, and precision performance wheels. Front three-quarter beauty view, cinematic professional automotive photography, realistic reflections, 8k resolution, razor-sharp detail.`;
+    // 3. MERCEDES-AMG GT / MERCEDES-AMG
+    if (/Mercedes-AMG/i.test(coreEntity)) {
+        const isGt = /GT/i.test(coreEntity);
+        const specificDetails = isGt
+            ? 'authentic low-slung wide fastback coupe stance, signature Panamericana vertical-slat grille, active aerodynamic rear spoiler, large front air intakes, AMG twin-tailpipe exhaust, precision AMG performance wheels,'
+            : 'authentic sculpted aerodynamic body lines, signature AMG sports grille, quad exhaust, precision AMG performance wheels,';
+
+        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the ${specificDetails} premium metallic finish, realistic reflections, and dramatic lighting. Front three-quarter dynamic shot, cinematic automotive photography, 8k resolution, razor-sharp focus. Do not substitute a generic Mercedes.`;
+    }
+
+    // 4. PORSCHE 911
+    if (/Porsche 911/i.test(coreEntity)) {
+        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the iconic rear-engine coupe silhouette, signature round LED matrix headlights, wide muscular rear fenders, authentic Porsche crest, and precision performance wheels. Front three-quarter beauty view, cinematic professional automotive photography, realistic reflections, 8k resolution, razor-sharp detail. Do not substitute a generic sports car.`;
     }
 
     // 5. FERRARI
-    if (/\bferrari\b/i.test(raw)) {
-        const colorDesc = color ? `in ${color}` : 'in iconic Rosso Corsa red';
-        return `Create a photorealistic image of a Ferrari ${colorDesc}${contextPhrase}. Accurately depict the exotic Italian supercar with authentic aerodynamic sculpting, signature prancing horse badge, aggressive front splitter, performance alloy wheels, and glossy finish. Front three-quarter dynamic view, professional automotive photography, dramatic lighting, 8k resolution, razor-sharp focus.`;
+    if (/Ferrari/i.test(coreEntity)) {
+        const cDesc = color ? `${color} finish` : 'iconic Rosso Corsa red';
+        return `Create a photorealistic image of a ${coreEntity} in ${cDesc}, ${envDesc}. Accurately depict the exotic Italian supercar with authentic aerodynamic sculpting, signature prancing horse badge, aggressive front splitter, performance alloy wheels, and glossy finish. Front three-quarter dynamic view, professional automotive photography, dramatic lighting, 8k resolution.`;
     }
 
     // 6. LAMBORGHINI
-    if (/\blamborghini\b/i.test(raw)) {
-        const colorDesc = color ? ` in ${color}` : '';
-        return `Create a photorealistic image of a Lamborghini supercar${colorDesc}${contextPhrase}. Accurately depict the sharp, aggressive angular wedge design, signature Y-shaped LED lights, raging bull badge, wide performance stance, and realistic reflections. Front three-quarter view, cinematic supercar photography, 8k resolution.`;
+    if (/Lamborghini/i.test(coreEntity)) {
+        return `Create a photorealistic image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Accurately depict the sharp, aggressive angular wedge design, signature Y-shaped LED lights, raging bull badge, wide performance stance, and realistic reflections. Front three-quarter view, cinematic supercar photography, 8k resolution.`;
     }
 
-    // 7. GENERAL CAR / VEHICLE
-    if (/\b(?:car|automobile|vehicle|sedan|coupe|suv|supercar|sports\s*car)\b/i.test(raw)) {
-        const colorDesc = color ? ` ${color}` : ' sleek metallic';
-        return `Create a photorealistic, stunning image of a modern${colorDesc} car${contextPhrase}. Front three-quarter beauty shot, accurate vehicle proportions, sleek metallic bodywork with realistic environment reflections, crisp LED headlights, and elegant alloy wheels. Professional automotive studio photography, dramatic lighting, 8k resolution, photorealistic masterpiece.`;
+    // 7. GENERAL VEHICLE (car, sports car, supercar)
+    if (/\b(car|supercar|sports\s*car|sedan|coupe|suv|motorcycle)\b/i.test(coreEntity)) {
+        return `Create a photorealistic, stunning image of a ${coreEntity} in ${colorDesc}, ${envDesc}. Front three-quarter beauty shot, accurate vehicle proportions, sleek metallic bodywork with realistic environment reflections, crisp LED headlights, and elegant alloy wheels. Professional automotive studio photography, dramatic lighting, 8k resolution.`;
     }
 
     // 8. DOG / PUPPY
-    if (/\b(?:dog|puppy|canine|hound)\b/i.test(raw)) {
-        return `Create a high-quality, heartwarming professional photograph of a dog${contextPhrase}. Natural anatomy, beautifully detailed fur texture, expressive and alert eyes, and healthy posture. Shot outdoors with soft natural golden hour lighting, shallow depth of field with a gently blurred background, 8k resolution, crystal clear detail.`;
+    if (/\b(dog|puppy|canine|golden\s*retriever|husky|german\s*shepherd)\b/i.test(coreEntity)) {
+        return `Create a high-quality, heartwarming professional photograph of a ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Natural anatomy, beautifully detailed fur texture, expressive alert eyes, soft ambient natural lighting, shallow depth of field, 8k resolution, crystal clear detail.`;
     }
 
     // 9. CAT / KITTEN
-    if (/\b(?:cat|kitten|feline)\b/i.test(raw)) {
-        return `Create a high-quality, adorable professional photograph of a cat${contextPhrase}. Natural anatomy, fine whiskered details, soft fur texture, and captivating luminous eyes. Soft ambient natural lighting, shallow depth of field, 8k resolution, razor-sharp focus.`;
+    if (/\b(cat|kitten|feline)\b/i.test(coreEntity)) {
+        return `Create a high-quality, adorable professional photograph of a ${coreEntity}. Natural anatomy, fine whiskered details, soft fur texture, captivating luminous eyes, soft ambient natural lighting, shallow depth of field, 8k resolution.`;
     }
 
-    // 10. WILDLIFE & OTHER ANIMALS
-    if (/\b(?:lion|tiger|wolf|eagle|horse|elephant|bear|fox|panda|leopard|cheetah)\b/i.test(raw)) {
-        return `Create a majestic, high-resolution wildlife photograph of a ${raw}. Accurate anatomical proportions, natural habitat setting, realistic fur and feather textures, dramatic natural lighting, award-winning National Geographic style photography, 8k resolution.`;
+    // 10. MOUNTAIN / LANDSCAPE
+    if (/\b(mountain|mountains|peak|peaks|alps|landscape)\b/i.test(coreEntity)) {
+        return `Create a majestic, breathtaking landscape photograph of a ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Towering snow-capped peaks, rugged alpine rock textures, dramatic atmospheric clouds and golden hour sunlight catching the ridges. Wide-angle cinematic composition, stunning volumetric depth, 8k resolution, ultra-detailed.`;
     }
 
-    // 11. MOUNTAIN / LANDSCAPE
-    if (/\b(?:mountain|mountains|peak|peaks|alps|himalayas)\b/i.test(raw)) {
-        return `Create a majestic, breathtaking landscape photograph of a mountain${contextPhrase}. Towering snow-capped peaks, rugged alpine rock textures, dramatic atmospheric clouds and golden hour sunlight catching the ridges. Wide-angle cinematic composition, stunning volumetric depth, pristine natural beauty, 8k resolution, ultra-detailed.`;
-    }
+    // 11. GENERAL HIGH-QUALITY EXPANSION
+    return `Create a photorealistic, stunning image of ${coreEntity}${location ? ` in ${location}` : ''}${timeAtmosphere ? ` ${timeAtmosphere}` : ''}. Centered dynamic composition, authentic details, realistic textures, cinematic lighting, high contrast, crystal-clear 8k resolution, razor-sharp focus, award-winning photography.`;
+}
 
-    // 12. SUNSET / SUNRISE
-    if (/\b(?:sunset|sunrise|dusk|dawn)\b/i.test(raw)) {
-        return `Create a breathtaking, cinematic landscape photograph of a sunset${contextPhrase}. Vibrant warm gradient sky with golden, amber, and violet tones, radiant sunbeams breaking through clouds, casting rich reflections and long atmospheric shadows. 8k resolution, award-winning photography.`;
-    }
-
-    // 13. FUTURISTIC CITY / CYBERPUNK
-    if (/\b(?:futuristic\s+city|cyberpunk|sci-?fi\s+city|neon\s+city)\b/i.test(raw)) {
-        return `Create a visually stunning, cinematic image of a futuristic city${contextPhrase}. Soaring hyper-modern skyscrapers, intricate architectural skybridges, glowing neon holographic displays, sleek flying vehicles traversing illuminated transit corridors at dusk. Atmospheric volumetric haze, vibrant reflections, ultra-high detail, 8k resolution, science fiction masterpiece.`;
-    }
-
-    // 14. FOOD / CULINARY
-    if (/\b(?:pizza|burger|pasta|sushi|dessert|cake|coffee|steak|salad|soup|food|dish)\b/i.test(raw)) {
-        return `Create a mouthwatering professional culinary photograph of ${raw}. Delicious appetizing presentation, fresh ingredients, rich glistening textures, gentle steam, soft studio lighting, shallow depth of field, restaurant magazine quality.`;
-    }
-
-    // 15. DEFAULT / GENERAL HIGH-QUALITY EXPANSION
-    return `Create a photorealistic, stunning image of ${raw}. Perfectly centered composition, authentic details, realistic textures, gorgeous cinematic lighting, high contrast, crystal-clear 8k resolution, razor-sharp focus, award-winning photography.`;
+function transformToHighQualityPrompt(userSubject) {
+    const parsed = normalizeSubjectAndConstraints(userSubject);
+    return createHighQualityPrompt(parsed);
 }
 
 module.exports = {
     isImageGenerationRequest,
     extractImagePrompt,
+    normalizeSubjectAndConstraints,
+    createHighQualityPrompt,
     transformToHighQualityPrompt,
 };

@@ -52,19 +52,35 @@ async function initDB() {
                 client_chat_id VARCHAR(255) NOT NULL,
                 title VARCHAR(255) DEFAULT 'New chat',
                 messages JSONB DEFAULT '[]'::jsonb,
+                is_pinned BOOLEAN DEFAULT FALSE,
+                share_token VARCHAR(64),
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT unique_user_client_chat UNIQUE (user_id, client_chat_id)
             );
         `;
 
-        // Create index for fast sorting by recent chats
+        // Migrations for existing conversations table
+        await sql`
+            ALTER TABLE conversations 
+            ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+        `;
+        await sql`
+            ALTER TABLE conversations 
+            ADD COLUMN IF NOT EXISTS share_token VARCHAR(64);
+        `;
+
+        // Create indexes for fast sorting and querying
         await sql`
             CREATE INDEX IF NOT EXISTS idx_conversations_user_updated 
             ON conversations(user_id, updated_at DESC);
         `;
+        await sql`
+            CREATE INDEX IF NOT EXISTS idx_conversations_share_token 
+            ON conversations(share_token);
+        `;
 
         isInitialized = true;
-        console.log('[Neon DB] Schema initialized successfully');
+        console.log('[Neon DB] Schema initialized successfully with Chat status support');
         return true;
     } catch (err) {
         console.error('[Neon DB] Schema initialization error:', err.message);

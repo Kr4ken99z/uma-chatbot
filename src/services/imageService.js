@@ -2,6 +2,8 @@ const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL } = require('../utils/config');
 const {
     isImageGenerationRequest,
     extractImagePrompt,
+    normalizeSubjectAndConstraints,
+    createHighQualityPrompt,
     transformToHighQualityPrompt,
 } = require('./promptExpander');
 
@@ -70,15 +72,12 @@ async function generateWithNvidia(prompt) {
  */
 function buildImageUrl(prompt, options = {}) {
     const rawPrompt = (prompt || 'serene artistic landscape').trim();
-    
-    // Automatically elevate short/raw prompts to model-accurate visual prompts
     const highQualityPrompt = transformToHighQualityPrompt(rawPrompt);
     const encoded = encodeURIComponent(highQualityPrompt);
 
     // Native 1024x1024 FLUX training resolution: guarantees perfect round wheels, zero horizontal stretching
     const width = options.width || 1024;
     const height = options.height || 1024;
-    // Always use a unique seed so corrections & regenerations never show the same image
     const seed = options.seed || (Math.floor(Math.random() * 9000000) + 100000);
 
     return `https://image.pollinations.ai/prompt/${encoded}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
@@ -88,13 +87,14 @@ function buildImageUrl(prompt, options = {}) {
  * Generates Uma's complete markdown response containing the generated image
  * @param {string} prompt
  * @param {Array} [history]
- * @returns {Promise<{ reply: string, imageUrl: string, prompt: string }>}
+ * @returns {Promise<{ reply: string, imageUrl: string, prompt: string, chatTitle: string }>}
  */
 async function generateImageReply(prompt, history = []) {
-    const cleanSubject = extractImagePrompt(prompt, history) || prompt.trim();
+    const rawSubject = extractImagePrompt(prompt, history) || prompt.trim();
     
-    // Internally transform user request into an expert high-quality prompt (e.g. BMW M5 proportions, M badging, etc.)
-    const internalPrompt = transformToHighQualityPrompt(cleanSubject);
+    // Understand, normalize, and extract constraints
+    const parsed = normalizeSubjectAndConstraints(rawSubject);
+    const internalPrompt = createHighQualityPrompt(parsed);
 
     // Primary: NVIDIA Build API
     let imageUrl = await generateWithNvidia(internalPrompt);
@@ -104,14 +104,16 @@ async function generateImageReply(prompt, history = []) {
         imageUrl = buildImageUrl(internalPrompt);
     }
 
-    // Clean display title for user (never expose internal prompt details to user)
-    const displayTitle = cleanSubject.replace(/,.*$/, '').trim();
+    // Clean display title for user (e.g. "BMW M5 Competition", never exposes internal prompt details)
+    const displayTitle = parsed.cleanTitle || rawSubject.replace(/,.*$/, '').trim();
     const reply = `Here is your generated image of **${displayTitle}**:\n\n![${displayTitle}](${imageUrl})`;
 
     return {
         reply,
         imageUrl,
-        prompt: cleanSubject,
+        prompt: rawSubject,
+        normalizedEntity: parsed.coreEntity,
+        chatTitle: parsed.cleanTitle,
     };
 }
 
@@ -122,18 +124,18 @@ async function generateImageReply(prompt, history = []) {
  * @param {function} onChunk
  */
 async function streamImageReply(prompt, history, onChunk) {
-    // Support function passed as second argument if history omitted
     if (typeof history === 'function') {
         onChunk = history;
         history = [];
     }
 
-    const cleanSubject = extractImagePrompt(prompt, history) || prompt.trim();
+    const rawSubject = extractImagePrompt(prompt, history) || prompt.trim();
 
     onChunk('[[CREATING_IMAGE]]');
 
-    // Internally transform user request into an expert high-quality prompt
-    const internalPrompt = transformToHighQualityPrompt(cleanSubject);
+    // Understand, normalize, and extract constraints
+    const parsed = normalizeSubjectAndConstraints(rawSubject);
+    const internalPrompt = createHighQualityPrompt(parsed);
 
     // Primary: NVIDIA Build API
     let imageUrl = await generateWithNvidia(internalPrompt);
@@ -143,13 +145,19 @@ async function streamImageReply(prompt, history, onChunk) {
         imageUrl = buildImageUrl(internalPrompt);
     }
 
-    // Clean display title for user (never expose internal prompt details to user)
-    const displayTitle = cleanSubject.replace(/,.*$/, '').trim();
+    // Clean display title for user (e.g. "BMW M5 Competition", never exposes internal prompt details)
+    const displayTitle = parsed.cleanTitle || rawSubject.replace(/,.*$/, '').trim();
     const finalMarkdown = `Here is your generated image of **${displayTitle}**:\n\n![${displayTitle}](${imageUrl})`;
 
     onChunk(`__REPLACE_ALL__${finalMarkdown}`);
 
-    return { isImage: true, imageUrl, prompt: cleanSubject };
+    return { 
+        isImage: true, 
+        imageUrl, 
+        prompt: rawSubject,
+        normalizedEntity: parsed.coreEntity,
+        chatTitle: parsed.cleanTitle,
+    };
 }
 
 module.exports = {
