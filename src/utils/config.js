@@ -10,4 +10,5 @@ module.exports = {
     GROQ_MAX_OUTPUT_TOKENS: Number(process.env.GROQ_MAX_OUTPUT_TOKENS) || 2048,
     NVIDIA_API_KEY: process.env.NVIDIA_API_KEY || '',
     NVIDIA_IMAGE_MODEL: process.env.NVIDIA_IMAGE_MODEL || 'black-forest-labs/flux.1-dev',
+    TOGETHER_API_KEY: process.env.TOGETHER_API_KEY || '',
 };

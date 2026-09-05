@@ -1,4 +1,4 @@
-const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL } = require('../utils/config');
+const { NVIDIA_API_KEY, NVIDIA_IMAGE_MODEL, TOGETHER_API_KEY } = require('../utils/config');
 
 // Patterns to detect when a user is asking for image creation or modification
 const IMAGE_REQUEST_PATTERNS = [
@@ -145,8 +145,59 @@ async function generateWithNvidia(prompt) {
 }
 
 /**
- * Creates an image URL based on the visual prompt (Fallback engine)
- * Always centers vehicles with wide landscape framing so no portion is cut off.
+ * Generates an image using Together AI (FLUX.1-schnell)
+ * @param {string} prompt
+ * @returns {Promise<string|null>}
+ */
+async function generateWithTogether(prompt) {
+    if (!TOGETHER_API_KEY) return null;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const res = await fetch('https://api.together.xyz/v1/images/generations', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+                'Authorization': `Bearer ${TOGETHER_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'black-forest-labs/FLUX.1-schnell',
+                prompt: prompt,
+                width: 1024,
+                height: 768,
+                steps: 4,
+                n: 1,
+                response_format: 'b64_json',
+            }),
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+            console.warn('Together AI image returned status:', res.status);
+            return null;
+        }
+
+        const data = await res.json();
+        const b64 = data?.data?.[0]?.b64_json;
+        if (b64 && b64.length > 1000) {
+            return `data:image/jpeg;base64,${b64}`;
+        }
+        if (data?.data?.[0]?.url) {
+            return data.data[0].url;
+        }
+    } catch (err) {
+        console.warn('Together AI generation error or timeout:', err.message);
+    }
+    return null;
+}
+
+/**
+ * Creates an image URL based on the visual prompt (High-fidelity FLUX engine)
+ * Always centers vehicles and subjects with wide landscape framing so no portion is cut off.
  * @param {string} prompt
  * @param {object} options
  * @returns {string}
@@ -155,25 +206,26 @@ function buildImageUrl(prompt, options = {}) {
     const rawPrompt = (prompt || 'serene artistic landscape').trim();
     const isVehicle = /(car|bmw|audi|mercedes|ferrari|porsche|lamborghini|vehicle|truck|bike|motorcycle|suv|sedan|coupe|m5|m6|m3|m4)/i.test(rawPrompt);
     
-    // Explicit centering and framing so the front/rear bumper are never cut off
-    let framing = 'centered in frame, wide angle view, full subject in frame, clean space around subject, no cropped edges';
+    // Explicit centering and ample margin framing so subjects and bumpers are NEVER cut off
+    let framing = 'centered in dead center of frame, distant camera view with generous empty margins on all borders, full subject completely visible, completely uncropped, clean background, ultra-sharp focus, 8k resolution';
     if (isVehicle) {
-        framing = 'wide shot showing the entire vehicle from front bumper to rear bumper, full car in frame, completely centered, side three-quarter profile, generous spacing around car, no cropped parts';
+        framing = 'distant wide-angle camera shot, full body of the car centered in middle of frame, showing entire vehicle from front bumper to rear tail with wide margins on left and right, completely uncropped, clean studio road, ultra-high resolution 8k, photorealistic, pristine automotive lighting';
     }
 
     const hasStyle = /(photorealistic|cyberpunk|anime|digital art|oil painting|3d render|watercolor|cinematic)/i.test(rawPrompt);
     const enrichedPrompt = hasStyle 
         ? `${rawPrompt}, ${framing}`
-        : `${rawPrompt}, ${framing}, highly detailed, cinematic lighting, 8k resolution, photorealistic, masterpiece, sharp focus`;
+        : `${rawPrompt}, ${framing}, masterpiece, photorealistic, 8k uhd`;
 
     const encoded = encodeURIComponent(enrichedPrompt);
-    // Use landscape ratio for vehicles so wide cars fit naturally without edge cut-offs
-    const width = options.width || 1024;
-    const height = options.height || (isVehicle ? 680 : 1024);
+    // Use 16:9 widescreen ratio (1280x720) for vehicles so wide cars fit naturally with generous margins
+    const width = options.width || (isVehicle ? 1280 : 1024);
+    const height = options.height || (isVehicle ? 720 : 1024);
     // Always use a unique seed so corrections & regenerations never show the same image
     const seed = options.seed || (Math.floor(Math.random() * 9000000) + 100000);
 
-    return `https://image.pollinations.ai/prompt/${encoded}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
+    // Note: enhance=false ensures Pollinations does NOT alter/corrupt the centering prompt
+    return `https://image.pollinations.ai/prompt/${encoded}?model=flux&width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=false`;
 }
 
 /**
@@ -185,9 +237,15 @@ function buildImageUrl(prompt, options = {}) {
 async function generateImageReply(prompt, history = []) {
     const cleanPrompt = extractImagePrompt(prompt, history) || prompt.trim();
     
-    // Primary: Fast NVIDIA Build API, seamless fallback to Flux
-    let imageUrl = await generateWithNvidia(cleanPrompt);
+    // 1. Primary: Together AI FLUX.1 (if active)
+    let imageUrl = await generateWithTogether(cleanPrompt);
 
+    // 2. Secondary: Fast NVIDIA Build API
+    if (!imageUrl) {
+        imageUrl = await generateWithNvidia(cleanPrompt);
+    }
+
+    // 3. High-fidelity uncropped FLUX engine
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
     }
@@ -219,9 +277,15 @@ async function streamImageReply(prompt, history, onChunk) {
 
     onChunk('[[CREATING_IMAGE]]');
 
-    // Primary: Fast NVIDIA Build API, seamless fallback to Flux
-    let imageUrl = await generateWithNvidia(cleanPrompt);
+    // 1. Primary: Together AI FLUX.1 (if active)
+    let imageUrl = await generateWithTogether(cleanPrompt);
 
+    // 2. Secondary: Fast NVIDIA Build API
+    if (!imageUrl) {
+        imageUrl = await generateWithNvidia(cleanPrompt);
+    }
+
+    // 3. High-fidelity uncropped FLUX engine
     if (!imageUrl) {
         imageUrl = buildImageUrl(cleanPrompt);
     }
