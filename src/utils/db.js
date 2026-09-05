@@ -44,23 +44,6 @@ async function initDB() {
             );
         `;
 
-        // Create projects table
-        await sql`
-            CREATE TABLE IF NOT EXISTS projects (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                description TEXT DEFAULT '',
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        `;
-
-        await sql`
-            CREATE INDEX IF NOT EXISTS idx_projects_user_updated 
-            ON projects(user_id, updated_at DESC);
-        `;
-
         // Create conversations table with JSONB messages
         await sql`
             CREATE TABLE IF NOT EXISTS conversations (
@@ -70,8 +53,6 @@ async function initDB() {
                 title VARCHAR(255) DEFAULT 'New chat',
                 messages JSONB DEFAULT '[]'::jsonb,
                 is_pinned BOOLEAN DEFAULT FALSE,
-                is_archived BOOLEAN DEFAULT FALSE,
-                project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
                 share_token VARCHAR(64),
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT unique_user_client_chat UNIQUE (user_id, client_chat_id)
@@ -85,14 +66,6 @@ async function initDB() {
         `;
         await sql`
             ALTER TABLE conversations 
-            ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
-        `;
-        await sql`
-            ALTER TABLE conversations 
-            ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;
-        `;
-        await sql`
-            ALTER TABLE conversations 
             ADD COLUMN IF NOT EXISTS share_token VARCHAR(64);
         `;
 
@@ -102,16 +75,12 @@ async function initDB() {
             ON conversations(user_id, updated_at DESC);
         `;
         await sql`
-            CREATE INDEX IF NOT EXISTS idx_conversations_user_project 
-            ON conversations(user_id, project_id);
-        `;
-        await sql`
             CREATE INDEX IF NOT EXISTS idx_conversations_share_token 
             ON conversations(share_token);
         `;
 
         isInitialized = true;
-        console.log('[Neon DB] Schema initialized successfully with Projects & Chat status support');
+        console.log('[Neon DB] Schema initialized successfully with Chat status support');
         return true;
     } catch (err) {
         console.error('[Neon DB] Schema initialization error:', err.message);

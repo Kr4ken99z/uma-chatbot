@@ -67,52 +67,29 @@ const switchAuthMode = document.getElementById('switchAuthMode');
 const authTitle = document.getElementById('authTitle');
 const authSubtitle = document.getElementById('authSubtitle');
 
-// Projects & Advanced Chat Management Elements
-const projectsSection = document.getElementById('projectsSection');
-const newProjectBtn = document.getElementById('newProjectBtn');
-const projectsList = document.getElementById('projectsList');
-const projectFilterBanner = document.getElementById('projectFilterBanner');
-const projectFilterName = document.getElementById('projectFilterName');
-const clearProjectFilterBtn = document.getElementById('clearProjectFilterBtn');
-const archivedToggleBtn = document.getElementById('archivedToggleBtn');
-const archivedCount = document.getElementById('archivedCount');
-const archivedChevron = document.getElementById('archivedChevron');
-const archivedList = document.getElementById('archivedList');
-
-// Context Menus
+// Chat Management Elements & Modals
 const chatContextMenu = document.getElementById('chatContextMenu');
 const menuRenameChat = document.getElementById('menuRenameChat');
 const menuPinChat = document.getElementById('menuPinChat');
-const menuPinIcon = document.getElementById('menuPinIcon');
 const menuPinLabel = document.getElementById('menuPinLabel');
-const menuMoveChat = document.getElementById('menuMoveChat');
 const menuShareChat = document.getElementById('menuShareChat');
-const menuArchiveChat = document.getElementById('menuArchiveChat');
-const menuArchiveIcon = document.getElementById('menuArchiveIcon');
-const menuArchiveLabel = document.getElementById('menuArchiveLabel');
 const menuDeleteChat = document.getElementById('menuDeleteChat');
 
-const projectContextMenu = document.getElementById('projectContextMenu');
-const menuRenameProject = document.getElementById('menuRenameProject');
-const menuDeleteProject = document.getElementById('menuDeleteProject');
+// Rename Modal Elements
+const renameModal = document.getElementById('renameModal');
+const renameModalBackdrop = document.getElementById('renameModalBackdrop');
+const closeRenameModalBtn = document.getElementById('closeRenameModalBtn');
+const renameForm = document.getElementById('renameForm');
+const renameTitleInput = document.getElementById('renameTitleInput');
+const cancelRenameBtn = document.getElementById('cancelRenameBtn');
 
-// Modals
-const projectModal = document.getElementById('projectModal');
-const projectModalBackdrop = document.getElementById('projectModalBackdrop');
-const closeProjectModalBtn = document.getElementById('closeProjectModalBtn');
-const cancelProjectBtn = document.getElementById('cancelProjectBtn');
-const projectForm = document.getElementById('projectForm');
-const projectModalTitle = document.getElementById('projectModalTitle');
-const projectNameInput = document.getElementById('projectNameInput');
-const projectDescInput = document.getElementById('projectDescInput');
+// Delete Modal Elements
+const deleteModal = document.getElementById('deleteModal');
+const deleteModalBackdrop = document.getElementById('deleteModalBackdrop');
+const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
-const moveModal = document.getElementById('moveModal');
-const moveModalBackdrop = document.getElementById('moveModalBackdrop');
-const closeMoveModalBtn = document.getElementById('closeMoveModalBtn');
-const cancelMoveBtn = document.getElementById('cancelMoveBtn');
-const removeFromProjectBtn = document.getElementById('removeFromProjectBtn');
-const projectPickerList = document.getElementById('projectPickerList');
-
+// Share Modal Elements
 const shareModal = document.getElementById('shareModal');
 const shareModalBackdrop = document.getElementById('shareModalBackdrop');
 const closeShareModalBtn = document.getElementById('closeShareModalBtn');
@@ -122,7 +99,6 @@ const shareFeedback = document.getElementById('shareFeedback');
 
 // Storage Keys
 const CONVERSATIONS_KEY = 'uma-chat-conversations';
-const PROJECTS_KEY = 'uma-projects';
 const ACTIVE_CHAT_KEY = 'uma-active-chat';
 const THEME_KEY = 'uma-theme-preference';
 const SIDEBAR_KEY = 'uma-sidebar-state';
@@ -148,33 +124,47 @@ function getGuestChatCount() {
 }
 
 function incrementGuestChatCount() {
-    const cur = getGuestChatCount() + 1;
-    localStorage.setItem(GUEST_CHAT_KEY, String(cur));
-    updateGuestCounterUI();
-    return cur;
+    const current = getGuestChatCount();
+    const updated = current + 1;
+    localStorage.setItem(GUEST_CHAT_KEY, updated.toString());
+    updateGuestLimitUI();
+    return updated;
+}
+
+function isGuestLimitReached() {
+    if (authToken) return false;
+    return getGuestChatCount() >= GUEST_CHAT_LIMIT;
 }
 
 function resetGuestChatCount() {
     localStorage.removeItem(GUEST_CHAT_KEY);
-    updateGuestCounterUI();
+    updateGuestLimitUI();
 }
 
-function updateGuestCounterUI() {
-    if (!guestCounterBadge) return;
-    if (authToken || currentUser) {
-        document.body.classList.add('user-logged-in');
-        guestCounterBadge.classList.add('hidden');
-        guestCounterBadge.hidden = true;
-        guestCounterBadge.style.setProperty('display', 'none', 'important');
+function updateGuestLimitUI() {
+    if (authToken) {
+        if (guestCounterBadge) guestCounterBadge.style.display = 'none';
         return;
     }
-    document.body.classList.remove('user-logged-in');
-    guestCounterBadge.classList.remove('hidden');
-    guestCounterBadge.hidden = false;
+
     const count = getGuestChatCount();
     const remaining = Math.max(0, GUEST_CHAT_LIMIT - count);
-    if (guestChatsLeft) guestChatsLeft.textContent = String(remaining);
-    guestCounterBadge.style.setProperty('display', 'inline-flex', 'important');
+
+    if (guestCounterBadge && guestChatsLeft) {
+        guestCounterBadge.style.display = 'inline-flex';
+        guestChatsLeft.textContent = remaining;
+
+        if (remaining === 0) {
+            guestCounterBadge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            guestCounterBadge.style.color = '#ef4444';
+        } else if (remaining === 1) {
+            guestCounterBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+            guestCounterBadge.style.color = '#f59e0b';
+        } else {
+            guestCounterBadge.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+            guestCounterBadge.style.color = 'var(--muted)';
+        }
+    }
 }
 
 function showGuestLimitModal() {
@@ -185,7 +175,7 @@ function showGuestLimitModal() {
     }
 }
 
-function closeGuestLimitModal() {
+function hideGuestLimitModal() {
     if (guestLimitModal && guestLimitBackdrop) {
         guestLimitModal.hidden = true;
         guestLimitBackdrop.hidden = true;
@@ -197,16 +187,13 @@ function closeGuestLimitModal() {
 let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
 let currentUser = loadCurrentUser();
 let conversations = loadConversations();
-let projects = loadProjects();
 let activeChatId = initTabChat();
-let activeProjectId = null;
-let isViewingArchived = false;
 let isGenerating = false;
 let toastTimeout = null;
 let authMode = 'signin'; // 'signin' | 'signup';
 let contextMenuTargetChatId = null;
-let contextMenuTargetProjectId = null;
-let editingProjectId = null;
+let pendingRenameChatId = null;
+let pendingDeleteChatId = null;
 
 // Prompt Pool
 const promptPool = [
@@ -227,14 +214,13 @@ initTheme();
 updateAuthUI();
 verifySession();
 renderPrompts();
-renderProjects();
 renderHistory();
 renderMessages();
 autoResizeInput();
 checkHealth();
 focusInput();
 checkSharedConversation();
-initProjectAndChatActions();
+initChatActions();
 
 // Event Listeners — Chat Form & Input
 chatForm.addEventListener('submit', handleFormSubmit);
@@ -610,8 +596,7 @@ async function handleAuthSubmit(event) {
         updateAuthUI();
         setAuthSuccess(authMode === 'signup' ? 'Account created successfully!' : 'Signed in successfully!');
 
-        // Fetch user's projects & conversation history directly from database
-        await loadUserProjectsFromDB();
+        // Fetch user's conversation history directly from database
         await loadUserConversationsFromDB();
 
         setTimeout(() => {
@@ -632,7 +617,6 @@ async function verifySession() {
         // Guest mode: always a clean, fresh start without previous user chats
         conversations = [createBlankConversation()];
         activeChatId = conversations[0].id;
-        renderProjects();
         renderHistory();
         renderMessages();
         return;
@@ -649,7 +633,6 @@ async function verifySession() {
                 currentUser = data.user;
                 localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
                 updateAuthUI();
-                await loadUserProjectsFromDB();
                 await loadUserConversationsFromDB();
                 return;
             }
@@ -658,25 +641,6 @@ async function verifySession() {
         handleLogout(false);
     } catch {
         // Offline or connection error; keep local user session
-    }
-}
-
-async function loadUserProjectsFromDB() {
-    if (!authToken) return;
-    try {
-        const res = await fetch('/api/projects', {
-            headers: { Authorization: `Bearer ${authToken}` },
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.ok && Array.isArray(data.projects)) {
-                projects = data.projects;
-                saveProjects();
-                renderProjects();
-            }
-        }
-    } catch (err) {
-        console.warn('Failed to load projects from DB:', err);
     }
 }
 
@@ -700,7 +664,6 @@ async function loadUserConversationsFromDB() {
                 sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
                 localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
                 localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
-                renderProjects();
                 renderHistory();
                 renderMessages();
             }
@@ -726,8 +689,6 @@ async function syncConversationToDB(conv) {
                 title: conv.title || 'New chat',
                 messages: conv.messages,
                 isPinned: Boolean(conv.isPinned),
-                isArchived: Boolean(conv.isArchived),
-                projectId: conv.projectId || null,
                 shareToken: conv.shareToken || null,
             }),
         });
@@ -744,12 +705,7 @@ function handleLogout(shouldNotify = true) {
     localStorage.removeItem(AUTH_USER_KEY);
     localStorage.removeItem(CONVERSATIONS_KEY);
     localStorage.removeItem(ACTIVE_CHAT_KEY);
-    localStorage.removeItem(PROJECTS_KEY);
     sessionStorage.removeItem(TAB_CHAT_KEY);
-
-    projects = [];
-    activeProjectId = null;
-    isViewingArchived = false;
 
     // Completely reset to a fresh blank start for the guest
     conversations = [createBlankConversation()];
@@ -757,7 +713,6 @@ function handleLogout(shouldNotify = true) {
     resetGuestChatCount();
 
     updateAuthUI();
-    renderProjects();
     renderHistory();
     renderMessages();
     focusInput();
@@ -2095,8 +2050,6 @@ function normalizeConversation(conv) {
         messages,
         updatedAt: Number(conv.updatedAt) || Date.now(),
         isPinned: Boolean(conv.isPinned ?? conv.is_pinned),
-        isArchived: Boolean(conv.isArchived ?? conv.is_archived),
-        projectId: conv.projectId ?? conv.project_id ?? null,
         shareToken: conv.shareToken ?? conv.share_token ?? null,
     };
 }
@@ -2108,26 +2061,8 @@ function createBlankConversation() {
         messages: [],
         updatedAt: Date.now(),
         isPinned: false,
-        isArchived: false,
-        projectId: activeProjectId || null,
         shareToken: null,
     };
-}
-
-function loadProjects() {
-    try {
-        const saved = JSON.parse(localStorage.getItem(PROJECTS_KEY));
-        if (Array.isArray(saved)) return saved;
-    } catch {
-        // Fall through
-    }
-    return [];
-}
-
-function saveProjects() {
-    if (authToken) {
-        localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
-    }
 }
 
 function createConversation() {
@@ -2152,15 +2087,12 @@ function initTabChat() {
     const isExistingTab = sessionStorage.getItem(TAB_SESSION_KEY) === 'true';
     const savedTabChatId = sessionStorage.getItem(TAB_CHAT_KEY);
 
-    // If this tab was refreshed, keep the conversation that was already open here
     if (isExistingTab && savedTabChatId && conversations.some(c => c.id === savedTabChatId)) {
         return savedTabChatId;
     }
 
-    // This is a BRAND NEW TAB:
     sessionStorage.setItem(TAB_SESSION_KEY, 'true');
 
-    // If not logged in (guest), always start with a clean fresh slate!
     if (!authToken) {
         const guestChat = createBlankConversation();
         conversations = [guestChat];
@@ -2168,7 +2100,6 @@ function initTabChat() {
         return guestChat.id;
     }
 
-    // If logged in and the most recent conversation is already empty (brand new), use it
     const topConv = conversations[0];
     const isTopEmpty = topConv && (!topConv.messages || topConv.messages.length === 0);
 
@@ -2178,8 +2109,6 @@ function initTabChat() {
         return topConv.id;
     }
 
-    // Previous chats exist with messages:
-    // Automatically open a fresh new chat for this new tab and preserve all previous chats in history
     const freshChat = createBlankConversation();
     conversations.unshift(freshChat);
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
@@ -2216,130 +2145,55 @@ function clearAllHistory() {
     activeChatId = conversations[0].id;
     sessionStorage.setItem(TAB_CHAT_KEY, activeChatId);
     saveConversations();
-    renderProjects();
     renderHistory();
     renderMessages();
     focusInput();
-}
-
-function renderProjects() {
-    if (!projectsList) return;
-    projectsList.innerHTML = '';
-
-    if (!projects.length) {
-        const empty = document.createElement('div');
-        empty.className = 'project-empty-hint';
-        empty.textContent = 'No projects yet. Click ＋ New to create one.';
-        projectsList.appendChild(empty);
-    } else {
-        projects.forEach(project => {
-            const item = document.createElement('div');
-            item.className = `project-item${activeProjectId === project.id ? ' active' : ''}`;
-            item.setAttribute('role', 'listitem');
-
-            const count = conversations.filter(c => c.projectId === project.id && !c.isArchived).length;
-
-            item.innerHTML = `
-                <button class="project-btn" type="button" title="${escapeHtml(project.description || project.name)}">
-                    <span class="project-icon">📁</span>
-                    <span class="project-name">${escapeHtml(project.name)}</span>
-                    <span class="project-count">${count}</span>
-                </button>
-                <button class="project-more-btn" type="button" title="Project options" aria-label="Project options">⋮</button>
-            `;
-
-            const projectBtn = item.querySelector('.project-btn');
-            projectBtn.addEventListener('click', () => {
-                if (activeProjectId === project.id) {
-                    activeProjectId = null;
-                } else {
-                    activeProjectId = project.id;
-                }
-                renderProjects();
-                renderHistory();
-            });
-
-            const moreBtn = item.querySelector('.project-more-btn');
-            moreBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openProjectContextMenu(e, project.id);
-            });
-
-            projectsList.appendChild(item);
-        });
-    }
-
-    updateProjectFilterBanner();
-}
-
-function updateProjectFilterBanner() {
-    if (!projectFilterBanner) return;
-    if (activeProjectId) {
-        const proj = projects.find(p => p.id === activeProjectId);
-        if (proj) {
-            projectFilterName.textContent = proj.name;
-            projectFilterBanner.style.display = 'flex';
-            return;
-        }
-    }
-    projectFilterBanner.style.display = 'none';
 }
 
 function renderHistory() {
     if (!historyList) return;
     historyList.innerHTML = '';
 
-    let visibleChats = conversations.filter(c => !c.isArchived);
-    if (activeProjectId) {
-        visibleChats = visibleChats.filter(c => c.projectId === activeProjectId);
-    }
-
-    visibleChats.sort((a, b) => {
+    const sortedChats = [...conversations].sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
         return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
 
-    if (!visibleChats.length) {
+    if (!sortedChats.length) {
         const empty = document.createElement('p');
         empty.className = 'empty-history';
-        empty.textContent = activeProjectId ? 'No chats in this project.' : 'No chats yet.';
+        empty.textContent = 'No chats yet.';
         historyList.appendChild(empty);
-    } else {
-        visibleChats.forEach(conv => {
-            historyList.appendChild(createChatRowElement(conv));
-        });
+        return;
     }
 
-    renderArchivedSection();
+    sortedChats.forEach(conv => {
+        historyList.appendChild(createChatRowElement(conv));
+    });
 }
 
 function createChatRowElement(conv) {
     const row = document.createElement('div');
-    row.className = `chat-row-item${conv.id === activeChatId ? ' active' : ''}${conv.isPinned ? ' pinned' : ''}`;
+    row.className = `chat-row${conv.id === activeChatId ? ' active' : ''}${conv.isPinned ? ' pinned' : ''}`;
     row.setAttribute('role', 'listitem');
 
-    let projectBadgeHtml = '';
-    if (conv.projectId && !activeProjectId) {
-        const proj = projects.find(p => p.id === conv.projectId);
-        if (proj) {
-            projectBadgeHtml = `<span class="project-tag-badge">${escapeHtml(proj.name)}</span>`;
-        }
-    }
-
-    const pinIconHtml = conv.isPinned ? `<span class="chat-pin-icon" title="Pinned chat">📌</span>` : '';
+    const pinIconHtml = conv.isPinned
+        ? `<svg class="chat-pin-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-label="Pinned"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A4 4 0 0 1 14 9V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v5a4 4 0 0 1-2.11 3.56l-1.78.89A2 2 0 0 0 5 15.24Z"></path></svg>`
+        : '';
 
     row.innerHTML = `
-        <button class="chat-item-main" type="button">
+        <button class="chat-item" type="button" title="${escapeHtml(conv.title || 'Conversation')}">
             ${pinIconHtml}
             <span class="item-title">${escapeHtml(conv.title || 'Conversation')}</span>
-            ${projectBadgeHtml}
         </button>
-        <button class="chat-more-btn" type="button" title="Chat options" aria-label="Chat options">⋮</button>
+        <button class="chat-more-btn" type="button" title="Chat options" aria-label="Chat options">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        </button>
     `;
 
-    const mainBtn = row.querySelector('.chat-item-main');
-    mainBtn.addEventListener('click', () => {
+    const chatBtn = row.querySelector('.chat-item');
+    chatBtn.addEventListener('click', () => {
         if (activeChatId !== conv.id) {
             activeChatId = conv.id;
             saveConversations();
@@ -2359,57 +2213,23 @@ function createChatRowElement(conv) {
     return row;
 }
 
-function renderArchivedSection() {
-    if (!archivedToggleBtn || !archivedList) return;
-    const archivedChats = conversations.filter(c => c.isArchived);
-
-    if (!archivedChats.length) {
-        archivedToggleBtn.style.display = 'none';
-        archivedList.style.display = 'none';
-        return;
-    }
-
-    archivedToggleBtn.style.display = 'flex';
-    if (archivedCount) archivedCount.textContent = String(archivedChats.length);
-
-    if (isViewingArchived) {
-        archivedList.style.display = 'flex';
-        archivedChevron.style.transform = 'rotate(90deg)';
-        archivedList.innerHTML = '';
-        archivedChats.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(conv => {
-            archivedList.appendChild(createChatRowElement(conv));
-        });
-    } else {
-        archivedList.style.display = 'none';
-        archivedChevron.style.transform = 'none';
-    }
-}
-
 function openChatContextMenu(e, chatId) {
     closeAllContextMenus();
     contextMenuTargetChatId = chatId;
     const conv = conversations.find(c => c.id === chatId);
     if (!conv || !chatContextMenu) return;
 
-    if (menuPinLabel) menuPinLabel.textContent = conv.isPinned ? 'Unpin' : 'Pin';
-    if (menuPinIcon) menuPinIcon.textContent = conv.isPinned ? '📍' : '📌';
-    if (menuArchiveLabel) menuArchiveLabel.textContent = conv.isArchived ? 'Unarchive' : 'Archive';
-    if (menuArchiveIcon) menuArchiveIcon.textContent = conv.isArchived ? '📤' : '📦';
+    if (menuPinLabel) {
+        menuPinLabel.textContent = conv.isPinned ? 'Unpin' : 'Pin';
+    }
 
     positionMenu(chatContextMenu, e.clientX, e.clientY);
 }
 
-function openProjectContextMenu(e, projectId) {
-    closeAllContextMenus();
-    contextMenuTargetProjectId = projectId;
-    if (!projectContextMenu) return;
-    positionMenu(projectContextMenu, e.clientX, e.clientY);
-}
-
 function positionMenu(menuElem, x, y) {
     menuElem.style.display = 'flex';
-    const menuWidth = 190;
-    const menuHeight = menuElem.offsetHeight || 180;
+    const menuWidth = 170;
+    const menuHeight = menuElem.offsetHeight || 160;
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
 
@@ -2425,87 +2245,72 @@ function positionMenu(menuElem, x, y) {
 
 function closeAllContextMenus() {
     if (chatContextMenu) chatContextMenu.style.display = 'none';
-    if (projectContextMenu) projectContextMenu.style.display = 'none';
     contextMenuTargetChatId = null;
-    contextMenuTargetProjectId = null;
 }
 
-function openCreateProjectModal() {
-    editingProjectId = null;
-    if (projectModalTitle) projectModalTitle.textContent = 'Create New Project';
-    if (projectNameInput) projectNameInput.value = '';
-    if (projectDescInput) projectDescInput.value = '';
-    if (projectModal) projectModal.style.display = 'block';
-    if (projectModalBackdrop) projectModalBackdrop.style.display = 'block';
-    if (projectNameInput) setTimeout(() => projectNameInput.focus(), 60);
-}
-
-function openEditProjectModal(projectId) {
-    const proj = projects.find(p => p.id === projectId);
-    if (!proj) return;
-    editingProjectId = projectId;
-    if (projectModalTitle) projectModalTitle.textContent = 'Rename Project';
-    if (projectNameInput) projectNameInput.value = proj.name || '';
-    if (projectDescInput) projectDescInput.value = proj.description || '';
-    if (projectModal) projectModal.style.display = 'block';
-    if (projectModalBackdrop) projectModalBackdrop.style.display = 'block';
-    if (projectNameInput) setTimeout(() => projectNameInput.focus(), 60);
-}
-
-function closeProjectModal() {
-    if (projectModal) projectModal.style.display = 'none';
-    if (projectModalBackdrop) projectModalBackdrop.style.display = 'none';
-    editingProjectId = null;
-}
-
-function openMoveModal(chatId) {
+// Rename Modal
+function openRenameModal(chatId) {
     const conv = conversations.find(c => c.id === chatId);
-    if (!conv || !moveModal) return;
-    moveModal.dataset.chatId = chatId;
-
-    if (projectPickerList) {
-        projectPickerList.innerHTML = '';
-        if (!projects.length) {
-            projectPickerList.innerHTML = '<p style="color:var(--muted); font-size:0.85rem; padding:8px 0;">No projects created yet. Create a project first to assign chats.</p>';
-        } else {
-            projects.forEach(proj => {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = `project-picker-item${conv.projectId === proj.id ? ' current' : ''}`;
-                item.innerHTML = `
-                    <span class="picker-icon">📁</span>
-                    <span class="picker-name">${escapeHtml(proj.name)}</span>
-                    ${conv.projectId === proj.id ? '<span class="picker-check">✓ Assigned</span>' : ''}
-                `;
-                item.addEventListener('click', () => {
-                    conv.projectId = proj.id;
-                    saveConversations();
-                    renderProjects();
-                    renderHistory();
-                    closeMoveModal();
-                    if (authToken) {
-                        fetch(`/api/conversations/${conv.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                            body: JSON.stringify({ projectId: proj.id }),
-                        }).catch(console.warn);
-                    }
-                    showToast(`Moved to project "${proj.name}"`);
-                });
-                projectPickerList.appendChild(item);
-            });
-        }
+    if (!conv || !renameModal) return;
+    pendingRenameChatId = chatId;
+    if (renameTitleInput) {
+        renameTitleInput.value = conv.title || '';
     }
-
-    moveModal.style.display = 'block';
-    if (moveModalBackdrop) moveModalBackdrop.style.display = 'block';
+    renameModal.style.display = 'block';
+    if (renameModalBackdrop) renameModalBackdrop.style.display = 'block';
+    if (renameTitleInput) setTimeout(() => renameTitleInput.focus(), 60);
 }
 
-function closeMoveModal() {
-    if (moveModal) moveModal.style.display = 'none';
-    if (moveModalBackdrop) moveModalBackdrop.style.display = 'none';
+function closeRenameModal() {
+    if (renameModal) renameModal.style.display = 'none';
+    if (renameModalBackdrop) renameModalBackdrop.style.display = 'none';
+    pendingRenameChatId = null;
 }
 
+// Delete Confirmation Modal
+function openDeleteModal(chatId) {
+    const conv = conversations.find(c => c.id === chatId);
+    if (!conv || !deleteModal) return;
+    pendingDeleteChatId = chatId;
+    deleteModal.style.display = 'block';
+    if (deleteModalBackdrop) deleteModalBackdrop.style.display = 'block';
+}
+
+function closeDeleteModal() {
+    if (deleteModal) deleteModal.style.display = 'none';
+    if (deleteModalBackdrop) deleteModalBackdrop.style.display = 'none';
+    pendingDeleteChatId = null;
+}
+
+function confirmDeleteChat() {
+    if (!pendingDeleteChatId) return;
+    const chatId = pendingDeleteChatId;
+    closeDeleteModal();
+
+    const idx = conversations.findIndex(c => c.id === chatId);
+    if (idx !== -1) {
+        conversations.splice(idx, 1);
+    }
+    if (!conversations.length) {
+        conversations = [createBlankConversation()];
+    }
+    if (activeChatId === chatId) {
+        activeChatId = conversations[0].id;
+    }
+    saveConversations();
+    renderHistory();
+    renderMessages();
+
+    if (authToken) {
+        fetch(`/api/conversations/${chatId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${authToken}` },
+        }).catch(console.warn);
+    }
+    showToast('Conversation deleted');
+}
+
+// Share Modal
 async function openShareModal(chatId) {
     const conv = conversations.find(c => c.id === chatId);
     if (!conv || !shareModal) return;
@@ -2538,7 +2343,6 @@ async function openShareModal(chatId) {
 
     const shareUrl = `${window.location.origin}/?share=${token}`;
     if (shareLinkInput) shareLinkInput.value = shareUrl;
-    if (shareFeedback) shareFeedback.style.display = 'none';
 
     shareModal.style.display = 'block';
     if (shareModalBackdrop) shareModalBackdrop.style.display = 'block';
@@ -2578,117 +2382,17 @@ async function checkSharedConversation() {
     return false;
 }
 
-function initProjectAndChatActions() {
-    if (newProjectBtn) {
-        newProjectBtn.addEventListener('click', openCreateProjectModal);
-    }
-
-    if (clearProjectFilterBtn) {
-        clearProjectFilterBtn.addEventListener('click', () => {
-            activeProjectId = null;
-            renderProjects();
-            renderHistory();
-            showToast('Showing all chats');
-        });
-    }
-
-    if (archivedToggleBtn) {
-        archivedToggleBtn.addEventListener('click', () => {
-            isViewingArchived = !isViewingArchived;
-            renderArchivedSection();
-        });
-    }
-
-    if (projectForm) {
-        projectForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = projectNameInput?.value?.trim();
-            const description = projectDescInput?.value?.trim() || '';
-            if (!name) return;
-
-            if (editingProjectId) {
-                const proj = projects.find(p => p.id === editingProjectId);
-                if (proj) {
-                    proj.name = name;
-                    proj.description = description;
-                    saveProjects();
-                    renderProjects();
-                    renderHistory();
-                    if (authToken) {
-                        fetch(`/api/projects/${editingProjectId}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                            body: JSON.stringify({ name, description }),
-                        }).catch(console.warn);
-                    }
-                    showToast(`Project renamed to "${name}"`);
-                }
-            } else {
-                const newProj = {
-                    id: createId(),
-                    name,
-                    description,
-                    createdAt: Date.now(),
-                };
-                projects.push(newProj);
-                saveProjects();
-                activeProjectId = newProj.id;
-                renderProjects();
-                renderHistory();
-
-                if (authToken) {
-                    try {
-                        const res = await fetch('/api/projects', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                            body: JSON.stringify(newProj),
-                        });
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data.project && data.project.id) {
-                                newProj.id = data.project.id;
-                                saveProjects();
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('Failed to sync project creation:', err);
-                    }
-                }
-                showToast(`Project "${name}" created 📁`);
-            }
-
-            closeProjectModal();
-        });
-    }
-
-    if (closeProjectModalBtn) closeProjectModalBtn.addEventListener('click', closeProjectModal);
-    if (cancelProjectBtn) cancelProjectBtn.addEventListener('click', closeProjectModal);
-    if (projectModalBackdrop) projectModalBackdrop.addEventListener('click', closeProjectModal);
-
+function initChatActions() {
+    // 1. Context Menu: Rename
     if (menuRenameChat) {
         menuRenameChat.addEventListener('click', () => {
             const chatId = contextMenuTargetChatId;
             closeAllContextMenus();
-            const conv = conversations.find(c => c.id === chatId);
-            if (!conv) return;
-
-            const newTitle = prompt('Rename conversation:', conv.title);
-            if (newTitle && newTitle.trim()) {
-                conv.title = newTitle.trim();
-                saveConversations();
-                renderHistory();
-                if (authToken) {
-                    fetch(`/api/conversations/${conv.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                        body: JSON.stringify({ title: conv.title }),
-                    }).catch(console.warn);
-                }
-                showToast('Conversation renamed');
-            }
+            if (chatId) openRenameModal(chatId);
         });
     }
 
+    // 2. Context Menu: Pin / Unpin
     if (menuPinChat) {
         menuPinChat.addEventListener('click', () => {
             const chatId = contextMenuTargetChatId;
@@ -2706,169 +2410,72 @@ function initProjectAndChatActions() {
                     body: JSON.stringify({ isPinned: conv.isPinned }),
                 }).catch(console.warn);
             }
-            showToast(conv.isPinned ? 'Chat pinned to top 📌' : 'Chat unpinned');
+            showToast(conv.isPinned ? 'Chat pinned 📌' : 'Chat unpinned');
         });
     }
 
-    if (menuMoveChat) {
-        menuMoveChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            openMoveModal(chatId);
-        });
-    }
-
+    // 3. Context Menu: Share
     if (menuShareChat) {
         menuShareChat.addEventListener('click', () => {
             const chatId = contextMenuTargetChatId;
             closeAllContextMenus();
-            openShareModal(chatId);
+            if (chatId) openShareModal(chatId);
         });
     }
 
-    if (menuArchiveChat) {
-        menuArchiveChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            const conv = conversations.find(c => c.id === chatId);
-            if (!conv) return;
-
-            conv.isArchived = !conv.isArchived;
-            if (conv.isArchived && activeChatId === conv.id) {
-                const nonArchived = conversations.filter(c => !c.isArchived);
-                if (nonArchived.length > 0) {
-                    activeChatId = nonArchived[0].id;
-                } else {
-                    const fresh = createBlankConversation();
-                    activeChatId = fresh.id;
-                }
-            }
-            saveConversations();
-            renderProjects();
-            renderHistory();
-            renderMessages();
-
-            if (authToken) {
-                fetch(`/api/conversations/${conv.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                    body: JSON.stringify({ isArchived: conv.isArchived }),
-                }).catch(console.warn);
-            }
-            showToast(conv.isArchived ? 'Chat archived 📦' : 'Chat unarchived');
-        });
-    }
-
+    // 4. Context Menu: Delete
     if (menuDeleteChat) {
         menuDeleteChat.addEventListener('click', () => {
             const chatId = contextMenuTargetChatId;
             closeAllContextMenus();
-            const conv = conversations.find(c => c.id === chatId);
-            if (!conv) return;
-
-            if (confirm(`Delete conversation "${conv.title}"? This cannot be undone.`)) {
-                const idx = conversations.findIndex(c => c.id === conv.id);
-                if (idx !== -1) {
-                    conversations.splice(idx, 1);
-                }
-                if (!conversations.length) {
-                    conversations = [createBlankConversation()];
-                }
-                if (activeChatId === conv.id) {
-                    activeChatId = conversations[0].id;
-                }
-                saveConversations();
-                renderProjects();
-                renderHistory();
-                renderMessages();
-
-                if (authToken) {
-                    fetch(`/api/conversations/${conv.id}`, {
-                        method: 'DELETE',
-                        headers: { Authorization: `Bearer ${authToken}` },
-                    }).catch(console.warn);
-                }
-                showToast('Conversation deleted');
-            }
+            if (chatId) openDeleteModal(chatId);
         });
     }
 
-    if (menuRenameProject) {
-        menuRenameProject.addEventListener('click', () => {
-            const projId = contextMenuTargetProjectId;
-            closeAllContextMenus();
-            openEditProjectModal(projId);
-        });
-    }
+    // Rename Modal Listeners
+    if (renameForm) {
+        renameForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newTitle = renameTitleInput?.value?.trim();
+            if (!newTitle || !pendingRenameChatId) return;
 
-    if (menuDeleteProject) {
-        menuDeleteProject.addEventListener('click', () => {
-            const projId = contextMenuTargetProjectId;
-            closeAllContextMenus();
-            const proj = projects.find(p => p.id === projId);
-            if (!proj) return;
-
-            if (confirm(`Delete project "${proj.name}"? (Associated chats will not be deleted).`)) {
-                projects = projects.filter(p => p.id !== projId);
-                conversations.forEach(c => {
-                    if (c.projectId === projId) c.projectId = null;
-                });
-                if (activeProjectId === projId) activeProjectId = null;
-                saveProjects();
-                saveConversations();
-                renderProjects();
-                renderHistory();
-
-                if (authToken) {
-                    fetch(`/api/projects/${projId}`, {
-                        method: 'DELETE',
-                        headers: { Authorization: `Bearer ${authToken}` },
-                    }).catch(console.warn);
-                }
-                showToast(`Project "${proj.name}" deleted`);
-            }
-        });
-    }
-
-    if (closeMoveModalBtn) closeMoveModalBtn.addEventListener('click', closeMoveModal);
-    if (cancelMoveBtn) cancelMoveBtn.addEventListener('click', closeMoveModal);
-    if (moveModalBackdrop) moveModalBackdrop.addEventListener('click', closeMoveModal);
-
-    if (removeFromProjectBtn) {
-        removeFromProjectBtn.addEventListener('click', () => {
-            const chatId = moveModal.dataset.chatId;
-            const conv = conversations.find(c => c.id === chatId);
+            const conv = conversations.find(c => c.id === pendingRenameChatId);
             if (conv) {
-                conv.projectId = null;
+                conv.title = newTitle;
                 saveConversations();
-                renderProjects();
                 renderHistory();
                 if (authToken) {
                     fetch(`/api/conversations/${conv.id}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                        body: JSON.stringify({ projectId: null }),
+                        body: JSON.stringify({ title: conv.title }),
                     }).catch(console.warn);
                 }
-                showToast('Removed chat from project');
+                showToast('Conversation renamed');
             }
-            closeMoveModal();
+            closeRenameModal();
         });
     }
+    if (closeRenameModalBtn) closeRenameModalBtn.addEventListener('click', closeRenameModal);
+    if (cancelRenameBtn) cancelRenameBtn.addEventListener('click', closeRenameModal);
+    if (renameModalBackdrop) renameModalBackdrop.addEventListener('click', closeRenameModal);
 
+    // Delete Confirmation Modal Listeners
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+    if (deleteModalBackdrop) deleteModalBackdrop.addEventListener('click', closeDeleteModal);
+    if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteChat);
+
+    // Share Modal Listeners
     if (closeShareModalBtn) closeShareModalBtn.addEventListener('click', closeShareModal);
     if (shareModalBackdrop) shareModalBackdrop.addEventListener('click', closeShareModal);
-
     if (copyShareLinkBtn) {
         copyShareLinkBtn.addEventListener('click', () => {
             const url = shareLinkInput?.value;
             if (!url) return;
 
             navigator.clipboard.writeText(url).then(() => {
-                if (shareFeedback) shareFeedback.style.display = 'block';
                 copyShareLinkBtn.textContent = 'Copied! ✓';
                 setTimeout(() => {
-                    if (shareFeedback) shareFeedback.style.display = 'none';
                     copyShareLinkBtn.textContent = 'Copy Link';
                 }, 2500);
             }).catch(() => {
@@ -2877,20 +2484,19 @@ function initProjectAndChatActions() {
         });
     }
 
+    // Global Click to close context menu
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#chatContextMenu') &&
-            !e.target.closest('#projectContextMenu') &&
-            !e.target.closest('.chat-more-btn') &&
-            !e.target.closest('.project-more-btn')) {
+        if (!e.target.closest('#chatContextMenu') && !e.target.closest('.chat-more-btn')) {
             closeAllContextMenus();
         }
     });
 
+    // Escape key closes menus & modals
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeAllContextMenus();
-            closeProjectModal();
-            closeMoveModal();
+            closeRenameModal();
+            closeDeleteModal();
             closeShareModal();
         }
     });
