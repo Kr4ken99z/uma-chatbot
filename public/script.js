@@ -939,12 +939,12 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
-function highlightSyntax(code) {
+function highlightSyntax(code, lang = '') {
     let html = escapeHtml(code);
 
-    // Comments: // ... or /* ... */ or # ...
+    // Comments: // ... or /* ... */ or # ... or -- ...
     const comments = [];
-    html = html.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/g, (match) => {
+    html = html.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|--[^\n]*)/g, (match) => {
         const id = `__COMM_${comments.length}__`;
         comments.push(`<span class="token-comment">${match}</span>`);
         return id;
@@ -958,12 +958,16 @@ function highlightSyntax(code) {
         return id;
     });
 
-    // Keywords (Java, Python, JS, TS, C++, Go, etc.)
-    const keywordsRegex = /\b(public|private|protected|class|interface|enum|extends|implements|static|final|abstract|void|int|boolean|double|float|char|byte|short|long|return|if|else|for|while|do|switch|case|default|break|continue|new|this|super|try|catch|finally|throw|throws|import|package|def|function|var|let|const|async|await|typeof|instanceof|from|as|null|true|false|undefined)\b/g;
+    // Types & Standard Classes (Java, Python, JS, TS, Go, C++, etc.)
+    const typesRegex = /\b(String|Integer|Long|Double|Float|Boolean|Byte|Short|Character|Number|Object|Array|List|ArrayList|Map|HashMap|Set|HashSet|Queue|Deque|Stack|Vector|Promise|Observable|Error|Exception|DateTime|Date|Time|UUID|Scanner|System|Math|Console|JSON|RegExp)\b/g;
+    html = html.replace(typesRegex, '<span class="token-type">$1</span>');
+
+    // Keywords (Java, Python, JS, TS, C++, Go, Rust, SQL, Bash)
+    const keywordsRegex = /\b(public|private|protected|class|interface|enum|extends|implements|static|final|abstract|void|int|boolean|double|float|char|byte|short|long|return|if|else|elif|for|while|do|switch|case|default|break|continue|new|this|super|try|catch|finally|throw|throws|import|package|def|function|var|let|const|async|await|typeof|instanceof|from|as|null|true|false|undefined|export|yield|lambda|in|is|not|and|or|with|pass|self|fn|mut|pub|impl|trait|match|func|struct|chan|defer|go|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|JOIN|GROUP\s+BY|ORDER\s+BY|HAVING|CREATE|TABLE|ALTER|DROP)\b/g;
     html = html.replace(keywordsRegex, '<span class="token-keyword">$1</span>');
 
     // Numbers
-    html = html.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, '<span class="token-number">$1</span>');
+    html = html.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|0x[0-9a-fA-F]+)\b/g, '<span class="token-number">$1</span>');
 
     // Method calls / Functions: fnName(...)
     html = html.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/g, '<span class="token-fn">$1</span>');
@@ -979,6 +983,187 @@ function highlightSyntax(code) {
     });
 
     return html;
+}
+
+function formatInlineMarkdown(text) {
+    if (!text) return '';
+    let s = escapeHtml(text);
+    // Links: [text](url)
+    s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
+    // Bold: **text**
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic: *text* (safe guard against bold)
+    s = s.replace(/(?:^|[^\*])\*([^*\n]+?)\*(?:[^\*]|$)/g, (match, p1) => {
+        return match.replace(`*${p1}*`, `<em>${p1}</em>`);
+    });
+    // Strikethrough: ~~text~~
+    s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    // Inline code: `code`
+    s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
+    return s;
+}
+
+function parseMarkdownTables(text) {
+    const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*\r?\n)(?:^[ \t]*\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|[ \t]*\r?\n)(?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm;
+
+    return text.replace(tableRegex, (match) => {
+        const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) return match;
+
+        const headerLine = lines[0];
+        const separatorLine = lines[1];
+        const bodyLines = lines.slice(2);
+
+        const alignments = separatorLine
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map(cell => {
+                const c = cell.trim();
+                const left = c.startsWith(':');
+                const right = c.endsWith(':');
+                if (left && right) return 'center';
+                if (right) return 'right';
+                if (left) return 'left';
+                return 'left';
+            });
+
+        const headers = headerLine
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map((cell, i) => {
+                const align = alignments[i] || 'left';
+                return `<th style="text-align:${align}">${formatInlineMarkdown(cell.trim())}</th>`;
+            })
+            .join('');
+
+        const rows = bodyLines
+            .map(line => {
+                const cells = line
+                    .replace(/^\||\|$/g, '')
+                    .split('|')
+                    .map((cell, i) => {
+                        const align = alignments[i] || 'left';
+                        return `<td style="text-align:${align}">${formatInlineMarkdown(cell.trim())}</td>`;
+                    })
+                    .join('');
+                return `<tr>${cells}</tr>`;
+            })
+            .join('');
+
+        return `\n\n<div class="table-wrapper"><table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>\n\n`;
+    });
+}
+
+function parseMarkdownLists(text) {
+    const listBlockRegex = /(?:^|\n)((?:^[ \t]*(?:[-*+]|\d+\.)[ \t]+[^\n]+(?:\n|$))+)/gm;
+
+    return text.replace(listBlockRegex, (match, listBlock) => {
+        const rawLines = listBlock.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (!rawLines.length) return match;
+
+        const items = rawLines.map(line => {
+            const matchItem = line.match(/^([ \t]*)([-*+]|\d+\.)[ \t]+(.*)$/);
+            if (!matchItem) return { indent: 0, isOrdered: false, text: line };
+
+            const leadingWhitespace = matchItem[1].replace(/\t/g, '    ').length;
+            const marker = matchItem[2];
+            const content = matchItem[3];
+            const isOrdered = /^\d+\./.test(marker);
+
+            return {
+                indent: Math.floor(leadingWhitespace / 2),
+                isOrdered,
+                text: content,
+                children: []
+            };
+        });
+
+        const rootItems = [];
+        const stack = [];
+
+        for (const item of items) {
+            while (stack.length > 0 && stack[stack.length - 1].indent >= item.indent) {
+                stack.pop();
+            }
+
+            if (stack.length === 0) {
+                rootItems.push(item);
+            } else {
+                stack[stack.length - 1].item.children.push(item);
+            }
+
+            stack.push({ indent: item.indent, item });
+        }
+
+        function renderItems(list) {
+            if (!list.length) return '';
+            const isOrdered = list[0].isOrdered;
+            const tag = isOrdered ? 'ol' : 'ul';
+            const cls = isOrdered ? 'md-ol' : 'md-ul';
+            const itemCls = isOrdered ? 'md-oli' : 'md-uli';
+
+            const inner = list.map(it => {
+                const childHtml = it.children.length > 0 ? renderItems(it.children) : '';
+                return `<li class="${itemCls}">${formatInlineMarkdown(it.text)}${childHtml}</li>`;
+            }).join('');
+
+            return `<${tag} class="${cls}">${inner}</${tag}>`;
+        }
+
+        return `\n\n${renderItems(rootItems)}\n\n`;
+    });
+}
+
+function parseCalloutsAndQuotes(text) {
+    const quoteRegex = /(?:^|\n)((?:^[ \t]*(?:&gt;|>)[ \t]?[^\n]+(?:\n|$))+)/gm;
+
+    return text.replace(quoteRegex, (match, quoteBlock) => {
+        const rawLines = quoteBlock.split(/\r?\n/)
+            .map(l => l.replace(/^[ \t]*(?:&gt;|>)[ \t]?/, '').trim())
+            .filter(Boolean);
+
+        if (!rawLines.length) return '';
+
+        const firstLine = rawLines[0];
+        let alertType = null;
+        let title = '';
+        let bodyLines = rawLines;
+
+        const alertMatch = firstLine.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO)\]\s*(.*)$/i);
+        if (alertMatch) {
+            alertType = alertMatch[1].toLowerCase();
+            if (alertType === 'info') alertType = 'note';
+            title = alertMatch[2] || (alertType.charAt(0).toUpperCase() + alertType.slice(1));
+            bodyLines = rawLines.slice(1);
+        } else {
+            const noteMatch = firstLine.match(/^\*\*(Note|Tip|Warning|Important|Caution):\*\*\s*(.*)$/i);
+            if (noteMatch) {
+                alertType = noteMatch[1].toLowerCase();
+                title = noteMatch[1];
+                if (noteMatch[2]) {
+                    bodyLines = [noteMatch[2], ...rawLines.slice(1)];
+                } else {
+                    bodyLines = rawLines.slice(1);
+                }
+            }
+        }
+
+        if (alertType) {
+            const icons = {
+                note: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+                tip: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>',
+                important: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="12 8 8 12 12 16 16 12 12 8"></polygon></svg>',
+                warning: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+                caution: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
+            };
+            const iconSvg = icons[alertType] || icons.note;
+            const contentHtml = bodyLines.map(formatInlineMarkdown).join('<br>');
+            return `\n\n<div class="md-callout md-callout-${alertType}"><div class="md-callout-header">${iconSvg}<span>${escapeHtml(title)}</span></div><div class="md-callout-body"><p>${contentHtml}</p></div></div>\n\n`;
+        }
+
+        const cleaned = rawLines.map(formatInlineMarkdown).join('<br>');
+        return `\n\n<blockquote class="md-blockquote"><p>${cleaned}</p></blockquote>\n\n`;
+    });
 }
 
 function renderMath(mathText, displayMode = false) {
@@ -1083,57 +1268,6 @@ function getCreatingImageHtml() {
     `;
 }
 
-function parseMarkdownTables(text) {
-    const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*\r?\n)(?:^[ \t]*\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|[ \t]*\r?\n)(?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm;
-
-    return text.replace(tableRegex, (match) => {
-        const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) return match;
-
-        const headerLine = lines[0];
-        const separatorLine = lines[1];
-        const bodyLines = lines.slice(2);
-
-        const alignments = separatorLine
-            .replace(/^\||\|$/g, '')
-            .split('|')
-            .map(cell => {
-                const c = cell.trim();
-                const left = c.startsWith(':');
-                const right = c.endsWith(':');
-                if (left && right) return 'center';
-                if (right) return 'right';
-                if (left) return 'left';
-                return 'left';
-            });
-
-        const headers = headerLine
-            .replace(/^\||\|$/g, '')
-            .split('|')
-            .map((cell, i) => {
-                const align = alignments[i] || 'left';
-                return `<th style="text-align:${align}">${cell.trim()}</th>`;
-            })
-            .join('');
-
-        const rows = bodyLines
-            .map(line => {
-                const cells = line
-                    .replace(/^\||\|$/g, '')
-                    .split('|')
-                    .map((cell, i) => {
-                        const align = alignments[i] || 'left';
-                        return `<td style="text-align:${align}">${cell.trim()}</td>`;
-                    })
-                    .join('');
-                return `<tr>${cells}</tr>`;
-            })
-            .join('');
-
-        return `\n\n<div class="table-wrapper"><table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>\n\n`;
-    });
-}
-
 function formatMarkdown(text) {
     if (!text) return '';
 
@@ -1189,26 +1323,20 @@ function formatMarkdown(text) {
         return `\n\n${placeholder}\n\n`;
     });
 
-    // 4. Extract tables before escaping
+    // 4. Extract tables (cells automatically formatted via formatInlineMarkdown)
     processed = processed.replace(/((?:^[ \t]*\|[^\n]+\|[ \t]*\r?\n)(?:^[ \t]*\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|[ \t]*\r?\n)(?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm, (match) => {
         const placeholder = `__TABLE_BLOCK_${tableBlocks.length}__`;
         tableBlocks.push(parseMarkdownTables(match).trim());
         return `\n\n${placeholder}\n\n`;
     });
 
-    // 5. Escape regular text (preserves all Unicode characters like →, ←, ✓, ✗, •, –, —, ≤, ≥, ≠, ≈, ∞, ×, ÷, √, π, ∑, ∫, {})
-    processed = escapeHtml(processed);
+    // 5. Parse callouts & blockquotes
+    processed = parseCalloutsAndQuotes(processed);
 
-    // 6. Markdown Links: [text](url)
-    processed = processed.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
+    // 6. Parse ordered & unordered lists (including hierarchical nested lists)
+    processed = parseMarkdownLists(processed);
 
-    // 7. Bold, Italic, Strikethrough & Inline Code
-    processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    processed = processed.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-    processed = processed.replace(/~~(.+?)~~/g, '<del>$1</del>');
-    processed = processed.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
-
-    // 8. Headers with clear visual hierarchy
+    // 7. Headers with clear visual hierarchy
     processed = processed.replace(/^###### (.*$)/gim, '<h6 class="md-h6">$1</h6>');
     processed = processed.replace(/^##### (.*$)/gim, '<h6 class="md-h5">$1</h6>');
     processed = processed.replace(/^#### (.*$)/gim, '<h5 class="md-h4">$1</h5>');
@@ -1216,40 +1344,16 @@ function formatMarkdown(text) {
     processed = processed.replace(/^## (.*$)/gim, '<h3 class="md-h2">$1</h3>');
     processed = processed.replace(/^# (.*$)/gim, '<h2 class="md-h1">$1</h2>');
 
-    // 9. Blockquotes: &gt; quote
-    processed = processed.replace(/(?:^|\n)((?:^[ \t]*(?:&gt;|>)[ \t]?[^\n]+(?:\n|$))+)/gm, (match, quoteBlock) => {
-        const cleaned = quoteBlock.split(/\n/).map(l => l.replace(/^[ \t]*(?:&gt;|>)[ \t]?/, '').trim()).filter(Boolean).join('<br>');
-        return `\n\n<blockquote class="md-blockquote"><p>${cleaned}</p></blockquote>\n\n`;
-    });
-
-    // 10. Horizontal rules (--- or ***)
+    // 8. Horizontal rules (--- or ***)
     processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gim, '\n\n<hr class="md-hr">\n\n');
 
-    // 11. Ordered lists (1. Item)
-    processed = processed.replace(/(?:^|\n)((?:^[ \t]*\d+\.[ \t]+[^\n]+(?:\n|$))+)/gm, (match, listBlock) => {
-        const items = listBlock.split(/\n/).filter(l => l.trim()).map(l => {
-            const itemText = l.replace(/^[ \t]*\d+\.[ \t]+/, '').trim();
-            return `<li class="md-oli">${itemText}</li>`;
-        }).join('');
-        return `\n\n<ol class="md-ol">${items}</ol>\n\n`;
-    });
-
-    // 12. Bullet lists (- or * or +)
-    processed = processed.replace(/(?:^|\n)((?:^[ \t]*[-*+][ \t]+[^\n]+(?:\n|$))+)/gm, (match, listBlock) => {
-        const items = listBlock.split(/\n/).filter(l => l.trim()).map(l => {
-            const itemText = l.replace(/^[ \t]*[-*+][ \t]+/, '').trim();
-            return `<li class="md-uli">${itemText}</li>`;
-        }).join('');
-        return `\n\n<ul class="md-ul">${items}</ul>\n\n`;
-    });
-
-    // 13. Group block elements into paragraphs
+    // 9. Group block elements into paragraphs
     const blocks = processed.split(/\n\n+/).map(b => b.trim()).filter(Boolean);
     const finalBlocks = blocks.map(block => {
-        if (/^<(?:h[1-6]|ul|ol|table|blockquote|hr|div|__CODE_|__MATH_|__TABLE_|__IMG_)/.test(block)) {
+        if (/^<(?:h[1-6]|ul|ol|table|blockquote|hr|div)/.test(block) || /^__(?:CODE_|MATH_|TABLE_|IMG_|CREATING_)/.test(block)) {
             return block;
         }
-        return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+        return `<p>${formatInlineMarkdown(block).replace(/\n/g, '<br>')}</p>`;
     });
 
     processed = finalBlocks.join('\n');

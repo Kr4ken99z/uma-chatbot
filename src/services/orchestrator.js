@@ -64,6 +64,9 @@ function buildTaskGuidance(classification) {
         case TASK_INTENTS.WRITING_TRANSFORMATION:
             return '\n[TASK GUIDANCE: Provide a polished, professional, and well-written version while strictly preserving the author’s original intent.]';
 
+        case TASK_INTENTS.LOCATION_REQUEST:
+            return '\n[TASK GUIDANCE: The user is seeking a nearby venue (cafe, restaurant, place). Explain gently that without device GPS coordinates, you protect their privacy, but can immediately pinpoint top recommendations if they specify their city or neighborhood. Provide a direct, clickable Markdown link to explore nearby: [Explore Nearby Places on Google Maps](https://www.google.com/maps/search/cafes+near+me), and share helpful criteria for selecting top-rated spots.]';
+
         default:
             return '';
     }

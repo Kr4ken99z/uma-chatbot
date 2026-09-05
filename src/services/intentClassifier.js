@@ -16,6 +16,7 @@ const TASK_INTENTS = {
     EDUCATIONAL_EXPLANATION: 'EDUCATIONAL_EXPLANATION',
     WRITING_TRANSFORMATION: 'WRITING_TRANSFORMATION',
     AMBIGUOUS_ACTION: 'AMBIGUOUS_ACTION',
+    LOCATION_REQUEST: 'LOCATION_REQUEST',
     COMPLEX_MULTI_STEP: 'COMPLEX_MULTI_STEP',
     GENERAL_KNOWLEDGE: 'GENERAL_KNOWLEDGE',
 };
@@ -29,6 +30,7 @@ const COMPLEXITY_LEVELS = {
 
 // Patterns for specific intents
 const REALTIME_REGEX = /\b(weather|temperature|temp|climate|forecast|current\s+time|what\s+time\s+is\s+it|clock\s+in)\b/i;
+const LOCATION_REGEX = /\b(?:find|search|look\s+for|recommend|show\s+me|where\s+can\s+i\s+find)?\s*(?:a\s+|some\s+)?(?:cafes?|coffee\s+shops?|restaurants?|food|places?\s+to\s+eat|hotels?|gas\s+stations?|stores?|bakeries|bars?)\s*(?:near\s+me|nearby|in\s+my\s+area|around\s+here|close\s+to\s+me)\b/i;
 const CODING_REGEX = /\b(code|function|algorithm|debug|fix\s+(?:this|the|my)?\s*code|syntax|error|exception|bug|java|python|javascript|typescript|c\+\+|sql|react|html|css|class|method)\b/i;
 const COMPARISON_REGEX = /\b(?:compare|difference\s+between|vs\.?|versus|better\s+than|advantages\s+and\s+disadvantages)\b/i;
 const EDUCATIONAL_REGEX = /\b(?:explain\s+.*(?:simply|like\s+i['’]?m|to\s+a\s+beginner|for\s+dummies|easy\s+way)|how\s+does\s+.*work|what\s+is\s+the\s+concept\s+of|teach\s+me)\b/i;
@@ -81,7 +83,17 @@ function classifyIntent(userMessage, history = []) {
         };
     }
 
-    // 4. Check for Ambiguous Action (e.g. "Book a table for me")
+    // 4. Check for Location / Places Request (e.g. "Find a cafe near me")
+    if (LOCATION_REGEX.test(raw)) {
+        return {
+            intent: TASK_INTENTS.LOCATION_REQUEST,
+            complexity: COMPLEXITY_LEVELS.TOOL,
+            toolRequired: 'locationService',
+            meta: {},
+        };
+    }
+
+    // 5. Check for Ambiguous Action (e.g. "Book a table for me")
     if (AMBIGUOUS_ACTION_REGEX.test(raw)) {
         return {
             intent: TASK_INTENTS.AMBIGUOUS_ACTION,
@@ -101,17 +113,7 @@ function classifyIntent(userMessage, history = []) {
         };
     }
 
-    // 6. Check for Coding / Debugging
-    if (CODING_REGEX.test(raw) || /```[\s\S]*?```/.test(raw)) {
-        return {
-            intent: TASK_INTENTS.CODING_DEBUGGING,
-            complexity: COMPLEXITY_LEVELS.MODERATE,
-            toolRequired: null,
-            meta: {},
-        };
-    }
-
-    // 7. Check for Technology / Concept Comparison
+    // 6. Check for Technology / Concept Comparison (e.g. "Compare Java and Python")
     if (COMPARISON_REGEX.test(raw)) {
         return {
             intent: TASK_INTENTS.KNOWLEDGE_COMPARISON,
@@ -121,7 +123,7 @@ function classifyIntent(userMessage, history = []) {
         };
     }
 
-    // 8. Check for Educational / Beginner Explanation
+    // 7. Check for Educational / Beginner Explanation (e.g. "Explain recursion like I'm a beginner")
     if (EDUCATIONAL_REGEX.test(raw)) {
         return {
             intent: TASK_INTENTS.EDUCATIONAL_EXPLANATION,
@@ -131,7 +133,7 @@ function classifyIntent(userMessage, history = []) {
         };
     }
 
-    // 9. Check for Writing Transformation
+    // 8. Check for Writing Transformation
     if (WRITING_REGEX.test(raw)) {
         return {
             intent: TASK_INTENTS.WRITING_TRANSFORMATION,
@@ -141,11 +143,34 @@ function classifyIntent(userMessage, history = []) {
         };
     }
 
-    // 10. General Knowledge / Simple Queries
-    const isSimpleFact = /^(?:who|what|where|when|which)\s+(?:is|was|are|were|the|created|invented)\b/i.test(raw) && raw.split(/\s+/).length < 9;
+    // 9. Check for General Definition or Direct Question ("What is Java?", "Who created Java?")
+    const isDirectQuestion = /^(?:who|what|where|when|which|why)\s+(?:is|was|are|were|the|created|invented|does|mean)\b/i.test(raw);
+    const hasExplicitCodingAction = /\b(debug|fix\s+(?:this|the|my)?\s*code|write\s+(?:a\s+)?(?:code|program|script|function)|solve|implement)\b/i.test(raw);
+
+    if (isDirectQuestion && !hasExplicitCodingAction) {
+        const isSimpleFact = raw.split(/\s+/).length < 9;
+        return {
+            intent: TASK_INTENTS.GENERAL_KNOWLEDGE,
+            complexity: isSimpleFact ? COMPLEXITY_LEVELS.SIMPLE : COMPLEXITY_LEVELS.MODERATE,
+            toolRequired: null,
+            meta: {},
+        };
+    }
+
+    // 10. Check for Coding / Debugging
+    if (CODING_REGEX.test(raw) || /```[\s\S]*?```/.test(raw) || hasExplicitCodingAction) {
+        return {
+            intent: TASK_INTENTS.CODING_DEBUGGING,
+            complexity: COMPLEXITY_LEVELS.MODERATE,
+            toolRequired: null,
+            meta: {},
+        };
+    }
+
+    // 11. General Knowledge Fallback
     return {
         intent: TASK_INTENTS.GENERAL_KNOWLEDGE,
-        complexity: isSimpleFact ? COMPLEXITY_LEVELS.SIMPLE : COMPLEXITY_LEVELS.MODERATE,
+        complexity: COMPLEXITY_LEVELS.MODERATE,
         toolRequired: null,
         meta: {},
     };
