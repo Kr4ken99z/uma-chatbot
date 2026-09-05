@@ -80,7 +80,7 @@ const renameModal = document.getElementById('renameModal');
 const renameModalBackdrop = document.getElementById('renameModalBackdrop');
 const closeRenameModalBtn = document.getElementById('closeRenameModalBtn');
 const renameForm = document.getElementById('renameForm');
-const renameTitleInput = document.getElementById('renameTitleInput');
+const renameTitleInput = document.getElementById('renameTitleInput') || document.getElementById('renameInput');
 const cancelRenameBtn = document.getElementById('cancelRenameBtn');
 
 // Delete Modal Elements
@@ -139,6 +139,10 @@ function updateGuestLimitUI() {
     if (guestCounterBadge) guestCounterBadge.style.display = 'none';
 }
 
+function updateGuestCounterUI() {
+    updateGuestLimitUI();
+}
+
 // Clear any stored guest count so users are never blocked
 localStorage.removeItem(GUEST_CHAT_KEY);
 
@@ -156,6 +160,18 @@ function hideGuestLimitModal() {
         guestLimitBackdrop.hidden = true;
         document.body.classList.remove('modal-open');
     }
+}
+
+function closeGuestLimitModal() {
+    hideGuestLimitModal();
+}
+
+function handlePromptSubmit(promptText) {
+    if (!promptText) return;
+    messageInput.value = promptText;
+    autoResizeInput();
+    updateClearInputButtonVisibility();
+    chatForm.requestSubmit();
 }
 
 // State
