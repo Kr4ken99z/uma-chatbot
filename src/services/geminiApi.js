@@ -154,26 +154,34 @@ async function readGeminiStream(response, onChunk) {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-        const { done, value } = await reader.read();
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
 
-        if (done) {
-            break;
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split(/\r?\n\r?\n/);
+            buffer = events.pop() || '';
+
+            events.forEach(event => {
+                processGeminiStreamEvent(event, onChunk);
+            });
         }
 
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split(/\r?\n\r?\n/);
-        buffer = events.pop() || '';
+        buffer += decoder.decode();
 
-        events.forEach(event => {
-            processGeminiStreamEvent(event, onChunk);
-        });
-    }
-
-    buffer += decoder.decode();
-
-    if (buffer.trim()) {
-        processGeminiStreamEvent(buffer, onChunk);
+        if (buffer.trim()) {
+            processGeminiStreamEvent(buffer, onChunk);
+        }
+    } catch (err) {
+        if (err.message && /forcibly closed|connection closed|wsarecv|ECONNRESET|network/i.test(err.message)) {
+            console.warn('Gemini stream safely terminated after network reset:', err.message);
+            return;
+        }
+        throw err;
     }
 }
 

@@ -67,36 +67,6 @@ const switchAuthMode = document.getElementById('switchAuthMode');
 const authTitle = document.getElementById('authTitle');
 const authSubtitle = document.getElementById('authSubtitle');
 
-// Chat Management Elements & Modals
-const chatContextMenu = document.getElementById('chatContextMenu');
-const menuRenameChat = document.getElementById('menuRenameChat');
-const menuPinChat = document.getElementById('menuPinChat');
-const menuPinLabel = document.getElementById('menuPinLabel');
-const menuShareChat = document.getElementById('menuShareChat');
-const menuDeleteChat = document.getElementById('menuDeleteChat');
-
-// Rename Modal Elements
-const renameModal = document.getElementById('renameModal');
-const renameModalBackdrop = document.getElementById('renameModalBackdrop');
-const closeRenameModalBtn = document.getElementById('closeRenameModalBtn');
-const renameForm = document.getElementById('renameForm');
-const renameTitleInput = document.getElementById('renameTitleInput');
-const cancelRenameBtn = document.getElementById('cancelRenameBtn');
-
-// Delete Modal Elements
-const deleteModal = document.getElementById('deleteModal');
-const deleteModalBackdrop = document.getElementById('deleteModalBackdrop');
-const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
-const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-
-// Share Modal Elements
-const shareModal = document.getElementById('shareModal');
-const shareModalBackdrop = document.getElementById('shareModalBackdrop');
-const closeShareModalBtn = document.getElementById('closeShareModalBtn');
-const shareLinkInput = document.getElementById('shareLinkInput');
-const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
-const shareFeedback = document.getElementById('shareFeedback');
-
 // Storage Keys
 const CONVERSATIONS_KEY = 'uma-chat-conversations';
 const ACTIVE_CHAT_KEY = 'uma-active-chat';
@@ -124,47 +94,33 @@ function getGuestChatCount() {
 }
 
 function incrementGuestChatCount() {
-    const current = getGuestChatCount();
-    const updated = current + 1;
-    localStorage.setItem(GUEST_CHAT_KEY, updated.toString());
-    updateGuestLimitUI();
-    return updated;
-}
-
-function isGuestLimitReached() {
-    if (authToken) return false;
-    return getGuestChatCount() >= GUEST_CHAT_LIMIT;
+    const cur = getGuestChatCount() + 1;
+    localStorage.setItem(GUEST_CHAT_KEY, String(cur));
+    updateGuestCounterUI();
+    return cur;
 }
 
 function resetGuestChatCount() {
     localStorage.removeItem(GUEST_CHAT_KEY);
-    updateGuestLimitUI();
+    updateGuestCounterUI();
 }
 
-function updateGuestLimitUI() {
-    if (authToken) {
-        if (guestCounterBadge) guestCounterBadge.style.display = 'none';
+function updateGuestCounterUI() {
+    if (!guestCounterBadge) return;
+    if (authToken || currentUser) {
+        document.body.classList.add('user-logged-in');
+        guestCounterBadge.classList.add('hidden');
+        guestCounterBadge.hidden = true;
+        guestCounterBadge.style.setProperty('display', 'none', 'important');
         return;
     }
-
+    document.body.classList.remove('user-logged-in');
+    guestCounterBadge.classList.remove('hidden');
+    guestCounterBadge.hidden = false;
     const count = getGuestChatCount();
     const remaining = Math.max(0, GUEST_CHAT_LIMIT - count);
-
-    if (guestCounterBadge && guestChatsLeft) {
-        guestCounterBadge.style.display = 'inline-flex';
-        guestChatsLeft.textContent = remaining;
-
-        if (remaining === 0) {
-            guestCounterBadge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-            guestCounterBadge.style.color = '#ef4444';
-        } else if (remaining === 1) {
-            guestCounterBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-            guestCounterBadge.style.color = '#f59e0b';
-        } else {
-            guestCounterBadge.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-            guestCounterBadge.style.color = 'var(--muted)';
-        }
-    }
+    if (guestChatsLeft) guestChatsLeft.textContent = String(remaining);
+    guestCounterBadge.style.setProperty('display', 'inline-flex', 'important');
 }
 
 function showGuestLimitModal() {
@@ -175,7 +131,7 @@ function showGuestLimitModal() {
     }
 }
 
-function hideGuestLimitModal() {
+function closeGuestLimitModal() {
     if (guestLimitModal && guestLimitBackdrop) {
         guestLimitModal.hidden = true;
         guestLimitBackdrop.hidden = true;
@@ -191,9 +147,6 @@ let activeChatId = initTabChat();
 let isGenerating = false;
 let toastTimeout = null;
 let authMode = 'signin'; // 'signin' | 'signup';
-let contextMenuTargetChatId = null;
-let pendingRenameChatId = null;
-let pendingDeleteChatId = null;
 
 // Prompt Pool
 const promptPool = [
@@ -219,8 +172,6 @@ renderMessages();
 autoResizeInput();
 checkHealth();
 focusInput();
-checkSharedConversation();
-initChatActions();
 
 // Event Listeners — Chat Form & Input
 chatForm.addEventListener('submit', handleFormSubmit);
@@ -596,7 +547,7 @@ async function handleAuthSubmit(event) {
         updateAuthUI();
         setAuthSuccess(authMode === 'signup' ? 'Account created successfully!' : 'Signed in successfully!');
 
-        // Fetch user's conversation history directly from database
+        // Fetch user's conversation history directly from MongoDB Atlas!
         await loadUserConversationsFromDB();
 
         setTimeout(() => {
@@ -688,8 +639,6 @@ async function syncConversationToDB(conv) {
                 id: conv.id,
                 title: conv.title || 'New chat',
                 messages: conv.messages,
-                isPinned: Boolean(conv.isPinned),
-                shareToken: conv.shareToken || null,
             }),
         });
     } catch (err) {
@@ -2049,8 +1998,6 @@ function normalizeConversation(conv) {
         title: conv.title || createTitle(messages),
         messages,
         updatedAt: Number(conv.updatedAt) || Date.now(),
-        isPinned: Boolean(conv.isPinned ?? conv.is_pinned),
-        shareToken: conv.shareToken ?? conv.share_token ?? null,
     };
 }
 
@@ -2060,8 +2007,6 @@ function createBlankConversation() {
         title: 'New chat',
         messages: [],
         updatedAt: Date.now(),
-        isPinned: false,
-        shareToken: null,
     };
 }
 
@@ -2087,12 +2032,15 @@ function initTabChat() {
     const isExistingTab = sessionStorage.getItem(TAB_SESSION_KEY) === 'true';
     const savedTabChatId = sessionStorage.getItem(TAB_CHAT_KEY);
 
+    // If this tab was refreshed, keep the conversation that was already open here
     if (isExistingTab && savedTabChatId && conversations.some(c => c.id === savedTabChatId)) {
         return savedTabChatId;
     }
 
+    // This is a BRAND NEW TAB:
     sessionStorage.setItem(TAB_SESSION_KEY, 'true');
 
+    // If not logged in (guest), always start with a clean fresh slate!
     if (!authToken) {
         const guestChat = createBlankConversation();
         conversations = [guestChat];
@@ -2100,6 +2048,7 @@ function initTabChat() {
         return guestChat.id;
     }
 
+    // If logged in and the most recent conversation is already empty (brand new), use it
     const topConv = conversations[0];
     const isTopEmpty = topConv && (!topConv.messages || topConv.messages.length === 0);
 
@@ -2109,6 +2058,8 @@ function initTabChat() {
         return topConv.id;
     }
 
+    // Previous chats exist with messages:
+    // Automatically open a fresh new chat for this new tab and preserve all previous chats in history
     const freshChat = createBlankConversation();
     conversations.unshift(freshChat);
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
@@ -2151,16 +2102,10 @@ function clearAllHistory() {
 }
 
 function renderHistory() {
-    if (!historyList) return;
     historyList.innerHTML = '';
+    const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
 
-    const sortedChats = [...conversations].sort((a, b) => {
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-        return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
-
-    if (!sortedChats.length) {
+    if (!sorted.length) {
         const empty = document.createElement('p');
         empty.className = 'empty-history';
         empty.textContent = 'No chats yet.';
@@ -2168,337 +2113,33 @@ function renderHistory() {
         return;
     }
 
-    sortedChats.forEach(conv => {
-        historyList.appendChild(createChatRowElement(conv));
-    });
-}
+    sorted.forEach(conv => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `chat-item${conv.id === activeChatId ? ' active' : ''}`;
 
-function createChatRowElement(conv) {
-    const row = document.createElement('div');
-    row.className = `chat-row${conv.id === activeChatId ? ' active' : ''}${conv.isPinned ? ' pinned' : ''}`;
-    row.setAttribute('role', 'listitem');
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'item-title';
+        titleSpan.textContent = conv.title || 'Conversation';
 
-    const pinIconHtml = conv.isPinned
-        ? `<svg class="chat-pin-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-label="Pinned"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A4 4 0 0 1 14 9V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v5a4 4 0 0 1-2.11 3.56l-1.78.89A2 2 0 0 0 5 15.24Z"></path></svg>`
-        : '';
+        const arrow = document.createElement('span');
+        arrow.className = 'arrow';
+        arrow.textContent = '↗';
 
-    row.innerHTML = `
-        <button class="chat-item" type="button" title="${escapeHtml(conv.title || 'Conversation')}">
-            ${pinIconHtml}
-            <span class="item-title">${escapeHtml(conv.title || 'Conversation')}</span>
-        </button>
-        <button class="chat-more-btn" type="button" title="Chat options" aria-label="Chat options">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
-        </button>
-    `;
+        btn.append(titleSpan, arrow);
 
-    const chatBtn = row.querySelector('.chat-item');
-    chatBtn.addEventListener('click', () => {
-        if (activeChatId !== conv.id) {
-            activeChatId = conv.id;
-            saveConversations();
-            renderHistory();
-            renderMessages();
-        }
-        closeSidebarOnMobile();
-        focusInput();
-    });
-
-    const moreBtn = row.querySelector('.chat-more-btn');
-    moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openChatContextMenu(e, conv.id);
-    });
-
-    return row;
-}
-
-function openChatContextMenu(e, chatId) {
-    closeAllContextMenus();
-    contextMenuTargetChatId = chatId;
-    const conv = conversations.find(c => c.id === chatId);
-    if (!conv || !chatContextMenu) return;
-
-    if (menuPinLabel) {
-        menuPinLabel.textContent = conv.isPinned ? 'Unpin' : 'Pin';
-    }
-
-    positionMenu(chatContextMenu, e.clientX, e.clientY);
-}
-
-function positionMenu(menuElem, x, y) {
-    menuElem.style.display = 'flex';
-    const menuWidth = 170;
-    const menuHeight = menuElem.offsetHeight || 160;
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-
-    let posX = x;
-    let posY = y;
-
-    if (posX + menuWidth > screenWidth - 10) posX = screenWidth - menuWidth - 10;
-    if (posY + menuHeight > screenHeight - 10) posY = screenHeight - menuHeight - 10;
-
-    menuElem.style.left = `${Math.max(10, posX)}px`;
-    menuElem.style.top = `${Math.max(10, posY)}px`;
-}
-
-function closeAllContextMenus() {
-    if (chatContextMenu) chatContextMenu.style.display = 'none';
-    contextMenuTargetChatId = null;
-}
-
-// Rename Modal
-function openRenameModal(chatId) {
-    const conv = conversations.find(c => c.id === chatId);
-    if (!conv || !renameModal) return;
-    pendingRenameChatId = chatId;
-    if (renameTitleInput) {
-        renameTitleInput.value = conv.title || '';
-    }
-    renameModal.style.display = 'block';
-    if (renameModalBackdrop) renameModalBackdrop.style.display = 'block';
-    if (renameTitleInput) setTimeout(() => renameTitleInput.focus(), 60);
-}
-
-function closeRenameModal() {
-    if (renameModal) renameModal.style.display = 'none';
-    if (renameModalBackdrop) renameModalBackdrop.style.display = 'none';
-    pendingRenameChatId = null;
-}
-
-// Delete Confirmation Modal
-function openDeleteModal(chatId) {
-    const conv = conversations.find(c => c.id === chatId);
-    if (!conv || !deleteModal) return;
-    pendingDeleteChatId = chatId;
-    deleteModal.style.display = 'block';
-    if (deleteModalBackdrop) deleteModalBackdrop.style.display = 'block';
-}
-
-function closeDeleteModal() {
-    if (deleteModal) deleteModal.style.display = 'none';
-    if (deleteModalBackdrop) deleteModalBackdrop.style.display = 'none';
-    pendingDeleteChatId = null;
-}
-
-function confirmDeleteChat() {
-    if (!pendingDeleteChatId) return;
-    const chatId = pendingDeleteChatId;
-    closeDeleteModal();
-
-    const idx = conversations.findIndex(c => c.id === chatId);
-    if (idx !== -1) {
-        conversations.splice(idx, 1);
-    }
-    if (!conversations.length) {
-        conversations = [createBlankConversation()];
-    }
-    if (activeChatId === chatId) {
-        activeChatId = conversations[0].id;
-    }
-    saveConversations();
-    renderHistory();
-    renderMessages();
-
-    if (authToken) {
-        fetch(`/api/conversations/${chatId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${authToken}` },
-        }).catch(console.warn);
-    }
-    showToast('Conversation deleted');
-}
-
-// Share Modal
-async function openShareModal(chatId) {
-    const conv = conversations.find(c => c.id === chatId);
-    if (!conv || !shareModal) return;
-
-    let token = conv.shareToken;
-    if (!token && authToken) {
-        try {
-            const res = await fetch(`/api/conversations/${conv.id}/share`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.ok && data.shareToken) {
-                    token = data.shareToken;
-                    conv.shareToken = token;
-                    saveConversations();
-                }
-            }
-        } catch (err) {
-            console.warn('Failed to generate share link:', err);
-        }
-    }
-
-    if (!token) {
-        token = `uma-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-        conv.shareToken = token;
-        saveConversations();
-    }
-
-    const shareUrl = `${window.location.origin}/?share=${token}`;
-    if (shareLinkInput) shareLinkInput.value = shareUrl;
-
-    shareModal.style.display = 'block';
-    if (shareModalBackdrop) shareModalBackdrop.style.display = 'block';
-}
-
-function closeShareModal() {
-    if (shareModal) shareModal.style.display = 'none';
-    if (shareModalBackdrop) shareModalBackdrop.style.display = 'none';
-}
-
-async function checkSharedConversation() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const shareToken = urlParams.get('share');
-    if (!shareToken) return false;
-
-    try {
-        const res = await fetch(`/api/conversations/shared/${shareToken}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data.ok && data.conversation) {
-                const sharedConv = normalizeConversation(data.conversation);
-                conversations.unshift(sharedConv);
-                activeChatId = sharedConv.id;
-                renderMessages();
-                showToast(`Viewing shared chat: "${sharedConv.title}"`);
-
-                const banner = document.createElement('div');
-                banner.className = 'shared-chat-notice-banner';
-                banner.innerHTML = `<span>🔗 Viewing shared conversation: <b>${escapeHtml(sharedConv.title)}</b> (View-only)</span>`;
-                messagesFlow.prepend(banner);
-                return true;
-            }
-        }
-    } catch (err) {
-        console.warn('Error loading shared conversation:', err);
-    }
-    return false;
-}
-
-function initChatActions() {
-    // 1. Context Menu: Rename
-    if (menuRenameChat) {
-        menuRenameChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            if (chatId) openRenameModal(chatId);
-        });
-    }
-
-    // 2. Context Menu: Pin / Unpin
-    if (menuPinChat) {
-        menuPinChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            const conv = conversations.find(c => c.id === chatId);
-            if (!conv) return;
-
-            conv.isPinned = !conv.isPinned;
-            saveConversations();
-            renderHistory();
-            if (authToken) {
-                fetch(`/api/conversations/${conv.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                    body: JSON.stringify({ isPinned: conv.isPinned }),
-                }).catch(console.warn);
-            }
-            showToast(conv.isPinned ? 'Chat pinned 📌' : 'Chat unpinned');
-        });
-    }
-
-    // 3. Context Menu: Share
-    if (menuShareChat) {
-        menuShareChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            if (chatId) openShareModal(chatId);
-        });
-    }
-
-    // 4. Context Menu: Delete
-    if (menuDeleteChat) {
-        menuDeleteChat.addEventListener('click', () => {
-            const chatId = contextMenuTargetChatId;
-            closeAllContextMenus();
-            if (chatId) openDeleteModal(chatId);
-        });
-    }
-
-    // Rename Modal Listeners
-    if (renameForm) {
-        renameForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const newTitle = renameTitleInput?.value?.trim();
-            if (!newTitle || !pendingRenameChatId) return;
-
-            const conv = conversations.find(c => c.id === pendingRenameChatId);
-            if (conv) {
-                conv.title = newTitle;
+        btn.addEventListener('click', () => {
+            if (activeChatId !== conv.id) {
+                activeChatId = conv.id;
                 saveConversations();
                 renderHistory();
-                if (authToken) {
-                    fetch(`/api/conversations/${conv.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                        body: JSON.stringify({ title: conv.title }),
-                    }).catch(console.warn);
-                }
-                showToast('Conversation renamed');
+                renderMessages();
             }
-            closeRenameModal();
+            closeSidebarOnMobile();
+            focusInput();
         });
-    }
-    if (closeRenameModalBtn) closeRenameModalBtn.addEventListener('click', closeRenameModal);
-    if (cancelRenameBtn) cancelRenameBtn.addEventListener('click', closeRenameModal);
-    if (renameModalBackdrop) renameModalBackdrop.addEventListener('click', closeRenameModal);
 
-    // Delete Confirmation Modal Listeners
-    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-    if (deleteModalBackdrop) deleteModalBackdrop.addEventListener('click', closeDeleteModal);
-    if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteChat);
-
-    // Share Modal Listeners
-    if (closeShareModalBtn) closeShareModalBtn.addEventListener('click', closeShareModal);
-    if (shareModalBackdrop) shareModalBackdrop.addEventListener('click', closeShareModal);
-    if (copyShareLinkBtn) {
-        copyShareLinkBtn.addEventListener('click', () => {
-            const url = shareLinkInput?.value;
-            if (!url) return;
-
-            navigator.clipboard.writeText(url).then(() => {
-                copyShareLinkBtn.textContent = 'Copied! ✓';
-                setTimeout(() => {
-                    copyShareLinkBtn.textContent = 'Copy Link';
-                }, 2500);
-            }).catch(() => {
-                showToast('Link copied to clipboard');
-            });
-        });
-    }
-
-    // Global Click to close context menu
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('#chatContextMenu') && !e.target.closest('.chat-more-btn')) {
-            closeAllContextMenus();
-        }
-    });
-
-    // Escape key closes menus & modals
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeAllContextMenus();
-            closeRenameModal();
-            closeDeleteModal();
-            closeShareModal();
-        }
+        historyList.appendChild(btn);
     });
 }
 
